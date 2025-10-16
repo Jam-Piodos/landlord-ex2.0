@@ -75,6 +75,11 @@ function hardRedirectToLogin() {
   window.location.replace('index.html');
 }
 
+function hardRedirectToForbidden() {
+  try { history.replaceState(null, '', '403.html'); } catch {}
+  window.location.replace('403.html');
+}
+
 function enforceAuthGuard() {
   const path = (window.location.pathname || '').toLowerCase();
   const isHome = path.endsWith('/home.html') || path.endsWith('home.html');
@@ -83,9 +88,11 @@ function enforceAuthGuard() {
   if (isHome || isAdmin) {
     // Must be logged in
     if (!isLoggedIn()) { hardRedirectToLogin(); return; }
-    // Role-based checks
-    if (isHome && !hasRole(['office'])) { hardRedirectToLogin(); return; }
-    if (isAdmin && !hasRole(['admin','office'])) { hardRedirectToLogin(); return; }
+    // Local role-based checks (only admin/office may access system)
+    if (!hasRole(['admin','office'])) { hardRedirectToForbidden(); return; }
+    // Page-level checks
+    if (isHome && !hasRole(['office'])) { hardRedirectToForbidden(); return; }
+    if (isAdmin && !hasRole(['admin'])) { hardRedirectToForbidden(); return; }
 
     // Online validation against Supabase to prevent localStorage spoofing
     (async () => {
@@ -106,8 +113,9 @@ function enforceAuthGuard() {
           .maybeSingle();
         if (error || !data || data.active === false) return window.llLogout();
         const role = String(data.role || '').toLowerCase();
-        if (isHome && role !== 'office') return window.llLogout();
-        if (isAdmin && !(role === 'office' || role === 'admin')) return window.llLogout();
+        if (!(role === 'admin' || role === 'office')) { hardRedirectToForbidden(); return; }
+        if (isHome && role !== 'office') { hardRedirectToForbidden(); return; }
+        if (isAdmin && role !== 'admin') { hardRedirectToForbidden(); return; }
       } catch { return window.llLogout(); }
     })();
 
@@ -117,6 +125,18 @@ function enforceAuthGuard() {
       if (!isLoggedIn()) { hardRedirectToLogin(); return; }
       // If user tries to navigate back into login, push forward to current protected page
       try { history.go(1); } catch {}
+    });
+    // Re-validate when page is restored from bfcache or tab is refocused
+    window.addEventListener('pageshow', function(e){
+      // On back/forward cache restore, ensure we still have a valid session
+      if (!isLoggedIn()) { hardRedirectToLogin(); return; }
+      // Optionally re-run remote validation to prevent stale role
+      try { enforceAuthGuard(); } catch {}
+    });
+    document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'visible') {
+        if (!isLoggedIn()) { hardRedirectToLogin(); return; }
+      }
     });
     window.addEventListener('keydown', function(e) {
       // Prevent Backspace navigation when not editing an input
@@ -138,7 +158,14 @@ if (document.readyState === 'loading') {
 window.llLogout = function() {
   try { localStorage.removeItem('ll_current_user'); } catch {}
   try { sessionStorage.removeItem('ll_session'); } catch {}
+  // Replace history entry and add cache-busting query to avoid bfcache reopening
+  try { history.replaceState(null, '', 'index.html'); } catch {}
+  try {
+    var bust = 'index.html?ts=' + Date.now();
+    window.location.replace(bust);
+  } catch {
   hardRedirectToLogin();
+  }
 };
 
 // Session utilities
@@ -152,10 +179,10 @@ function generateSessionToken() {
   }
 }
 
-window.llCreateSession = function(userId) {
+window.llCreateSession = function(userId, role) {
   try {
     const token = generateSessionToken();
-    const sess = { user_id: userId, token, ts: Date.now() };
+    const sess = { user_id: userId, role: (role ? String(role).toLowerCase() : undefined), token, ts: Date.now() };
     sessionStorage.setItem('ll_session', JSON.stringify(sess));
   } catch {}
 };
@@ -4016,6 +4043,39 @@ async function showOwnerProfilePopup(area, coords, map, latlng) {
 
   const fieldOrNA = (v) => (v === null || v === undefined || v === '' ? 'N/A' : v);
 
+  // Build EXIF images section (shown above owner-profile-card)
+  let exifHtml = '';
+  try {
+    let exifRaw = (area && area.exif_data) ? area.exif_data : null;
+    if (typeof exifRaw === 'string') {
+      try { exifRaw = JSON.parse(exifRaw); } catch {}
+    }
+    const list = Array.isArray(exifRaw) ? exifRaw : [];
+    if (list.length > 0) {
+      // Derive urls from common shapes
+      const urls = list.map(function(item){
+        if (!item) return null;
+        if (typeof item === 'string') return item;
+        if (typeof item === 'object') return item.url || item.data_url || item.href || item.path || null;
+        return null;
+      }).filter(Boolean);
+      if (urls.length > 0) {
+        exifHtml = `
+          <div class='exif-gallery' style="min-width:260px;max-width:360px;margin-bottom:10px;background:#fff;border:1px solid #ececec;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.12);padding:8px;">
+            <div style="font-weight:700;color:#111;font-size:.95em;margin:0 4px 6px 4px;">Photos</div>
+            <div style="display:flex; gap:8px; overflow-x:auto; padding:2px 4px; scrollbar-width: thin;">
+              ${urls.map(u => `<img src="${u}" alt="EXIF" style="flex:0 0 auto;width:88px;height:66px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;">`).join('')}
+            </div>
+          </div>`;
+      }
+    }
+    if (!exifHtml) {
+      exifHtml = `<div class='exif-gallery-empty' style="min-width:260px;max-width:360px;margin-bottom:10px;background:#fff;border:1px dashed #e5e7eb;border-radius:12px;padding:10px;color:#6b7280;font-size:.85em;">No EXIF images available</div>`;
+    }
+  } catch {
+    exifHtml = `<div class='exif-gallery-empty' style="min-width:260px;max-width:360px;margin-bottom:10px;background:#fff;border:1px dashed #e5e7eb;border-radius:12px;padding:10px;color:#6b7280;font-size:.85em;">No EXIF images available</div>`;
+  }
+
   let cardHtml = `<div class='owner-profile-card' style='min-width:260px;max-width:360px;padding:14px 14px 12px 14px;border-radius:14px;background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.15);border:1px solid #ececec;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell;'>`;
 
   cardHtml += `<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;'>` +
@@ -4130,7 +4190,7 @@ async function showOwnerProfilePopup(area, coords, map, latlng) {
 
       .setLatLng(popupLatLng)
 
-      .setContent(cardHtml)
+      .setContent(exifHtml + cardHtml)
 
       .openOn(map);
 

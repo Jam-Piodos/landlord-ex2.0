@@ -120,10 +120,10 @@
                 })); } catch {}
 
                 const role = String(user.role || '').toLowerCase();
-                // establish in-memory session (tab/window scoped) with random token
+                // establish in-memory session (tab/window scoped) with random token and role
                 try {
                   if (window.llCreateSession) {
-                    window.llCreateSession(user.user_id);
+                    window.llCreateSession(user.user_id, user.role);
                   } else {
                     // Fallback: create session locally when helper is unavailable on the login page
                     (function(){
@@ -136,27 +136,23 @@
                           return s;
                         } catch { return String(Math.random()).slice(2) + String(Date.now()); }
                       }
-                      var sess = { user_id: user.user_id, token: genToken(), ts: Date.now() };
+                      var sess = { user_id: user.user_id, role: String(user.role||'').toLowerCase(), token: genToken(), ts: Date.now() };
                       sessionStorage.setItem('ll_session', JSON.stringify(sess));
                     })();
                   }
                 } catch {}
-                if (role === 'office') {
-                    showDarSplash('home.html#map');
-                    return;
-                }
+                // Role gating at login outcome
                 if (role === 'admin') {
                     window.location.href = 'admin.html#profile';
                     return;
                 }
-                if (role === 'technician') {
-                    // For technicians, keep them off this portal
-                    errorEl.textContent = 'This portal is for office accounts only.';
-                    errorEl.hidden = false;
+                if (role === 'office') {
+                    showDarSplash('home.html#map');
                     return;
                 }
-
-                throw new Error('This portal is for office accounts only.');
+                errorEl.textContent = 'Access denied. Admin or Office role required.';
+                errorEl.hidden = false;
+                return;
             } catch (e) {
                 try { if (window.llClearSession) window.llClearSession(); } catch {}
                 errorEl.textContent = e?.message || 'Login failed. Please try again.';
