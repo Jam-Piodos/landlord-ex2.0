@@ -164,8 +164,71 @@ window.llLogout = function() {
     var bust = 'index.html?ts=' + Date.now();
     window.location.replace(bust);
   } catch {
-  hardRedirectToLogin();
+    hardRedirectToLogin();
   }
+};
+
+// Image modal functionality
+window.openImageModal = function(imageUrl, totalImages, currentIndex) {
+  const modal = document.getElementById('image-modal');
+  if (!modal) return;
+  
+  const img = modal.querySelector('#modal-image');
+  const prevBtn = modal.querySelector('#prev-image');
+  const nextBtn = modal.querySelector('#next-image');
+  const counter = modal.querySelector('#image-counter');
+  
+  if (img) img.src = imageUrl;
+  if (counter) counter.textContent = `${currentIndex + 1} / ${totalImages}`;
+  
+  // Show/hide navigation buttons
+  if (prevBtn) prevBtn.style.display = totalImages > 1 ? 'flex' : 'none';
+  if (nextBtn) nextBtn.style.display = totalImages > 1 ? 'flex' : 'none';
+  
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  
+  // Store current state for navigation
+  window.currentImageIndex = currentIndex;
+  window.currentImageUrls = window.currentImageUrls || [];
+};
+
+window.closeImageModal = function() {
+  const modal = document.getElementById('image-modal');
+  if (modal) {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+};
+
+window.navigateImage = function(direction) {
+  if (!window.currentImageUrls || window.currentImageUrls.length === 0) return;
+  
+  const total = window.currentImageUrls.length;
+  let newIndex = window.currentImageIndex + direction;
+  
+  if (newIndex < 0) newIndex = total - 1;
+  if (newIndex >= total) newIndex = 0;
+  
+  window.currentImageIndex = newIndex;
+  window.openImageModal(window.currentImageUrls[newIndex], total, newIndex);
+};
+
+// Safe image modal opener for popup thumbnails
+window.openImageModalFromPopup = function(imageUrl, totalImages, currentIndex) {
+  // Store URLs safely (this will be set by the popup generation)
+  if (!window.currentImageUrls) {
+    window.currentImageUrls = [];
+  }
+  
+  // Find the URLs from the current popup context
+  const popupElement = document.querySelector('.leaflet-popup-content');
+  if (popupElement) {
+    const images = popupElement.querySelectorAll('.exif-gallery img');
+    window.currentImageUrls = Array.from(images).map(img => img.src);
+  }
+  
+  window.openImageModal(imageUrl, totalImages, currentIndex);
 };
 
 // Session utilities
@@ -4046,28 +4109,39 @@ async function showOwnerProfilePopup(area, coords, map, latlng) {
   // Build EXIF images section (shown above owner-profile-card)
   let exifHtml = '';
   try {
-    let exifRaw = (area && area.exif_data) ? area.exif_data : null;
-    if (typeof exifRaw === 'string') {
-      try { exifRaw = JSON.parse(exifRaw); } catch {}
+    const urls = [];
+    
+    // Check land_image_url first (single image)
+    if (area && area.land_image_url && typeof area.land_image_url === 'string' && area.land_image_url.trim()) {
+      urls.push(area.land_image_url.trim());
     }
-    const list = Array.isArray(exifRaw) ? exifRaw : [];
-    if (list.length > 0) {
-      // Derive urls from common shapes
-      const urls = list.map(function(item){
-        if (!item) return null;
-        if (typeof item === 'string') return item;
-        if (typeof item === 'object') return item.url || item.data_url || item.href || item.path || null;
-        return null;
-      }).filter(Boolean);
-      if (urls.length > 0) {
-        exifHtml = `
-          <div class='exif-gallery' style="min-width:260px;max-width:360px;margin-bottom:10px;background:#fff;border:1px solid #ececec;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.12);padding:8px;">
-            <div style="font-weight:700;color:#111;font-size:.95em;margin:0 4px 6px 4px;">Photos</div>
-            <div style="display:flex; gap:8px; overflow-x:auto; padding:2px 4px; scrollbar-width: thin;">
-              ${urls.map(u => `<img src="${u}" alt="EXIF" style="flex:0 0 auto;width:88px;height:66px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;">`).join('')}
-            </div>
-          </div>`;
+    
+    // Check exif_data (jsonb array of images)
+    if (area && area.exif_data) {
+      let exifRaw = area.exif_data;
+      // exif_data is already jsonb, no need to parse
+      if (Array.isArray(exifRaw)) {
+        exifRaw.forEach(function(item) {
+          if (typeof item === 'string' && item.trim()) {
+            urls.push(item.trim());
+          } else if (typeof item === 'object' && item) {
+            const url = item.url || item.data_url || item.href || item.path || item.src || item.image_url;
+            if (url && typeof url === 'string' && url.trim()) {
+              urls.push(url.trim());
+            }
+          }
+        });
       }
+    }
+    
+    if (urls.length > 0) {
+      exifHtml = `
+        <div class='exif-gallery' style="min-width:260px;max-width:360px;margin-bottom:10px;background:#fff;border:1px solid #ececec;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.12);padding:8px;">
+          <div style="font-weight:700;color:#111;font-size:.95em;margin:0 4px 6px 4px;">Photos</div>
+          <div style="display:flex; gap:8px; overflow-x:auto; padding:2px 4px; scrollbar-width: thin;">
+            ${urls.map((u, index) => `<img src="${u}" alt="Land Area Photo" style="flex:0 0 auto;width:88px;height:66px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;cursor:pointer;transition:transform 0.2s ease;" onerror="this.style.display='none'" onclick="window.openImageModalFromPopup('${u}', ${urls.length}, ${index})" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">`).join('')}
+          </div>
+        </div>`;
     }
     if (!exifHtml) {
       exifHtml = `<div class='exif-gallery-empty' style="min-width:260px;max-width:360px;margin-bottom:10px;background:#fff;border:1px dashed #e5e7eb;border-radius:12px;padding:10px;color:#6b7280;font-size:.85em;">No EXIF images available</div>`;

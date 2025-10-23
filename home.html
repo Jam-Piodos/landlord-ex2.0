@@ -1359,11 +1359,48 @@
   </div>
 </div>
 
+<!-- Image Modal -->
+<div id="image-modal" class="image-modal-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(4px); z-index: 5000; align-items: center; justify-content: center;">
+  <div class="image-modal-content" style="position: relative; max-width: 90vw; max-height: 90vh; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+    <div class="image-modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8f9fa; border-bottom: 1px solid #e9ecef;">
+      <div id="image-counter" style="font-weight: 600; color: #495057; font-size: 14px;">1 / 1</div>
+      <button id="close-image-modal" onclick="window.closeImageModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d; padding: 4px; border-radius: 4px; transition: background 0.2s ease;" onmouseover="this.style.background='#e9ecef'" onmouseout="this.style.background='none'">×</button>
+    </div>
+    <div class="image-modal-body" style="position: relative; display: flex; align-items: center; justify-content: center; min-height: 300px; background: #000;">
+      <img id="modal-image" src="" alt="Full size image" style="max-width: 100%; max-height: 70vh; object-fit: contain; display: block;">
+      <button id="prev-image" onclick="window.navigateImage(-1)" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.7); color: white; border: none; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; font-size: 18px; display: none; align-items: center; justify-content: center; transition: background 0.2s ease;" onmouseover="this.style.background='rgba(0,0,0,0.9)'" onmouseout="this.style.background='rgba(0,0,0,0.7)'">‹</button>
+      <button id="next-image" onclick="window.navigateImage(1)" style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.7); color: white; border: none; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; font-size: 18px; display: none; align-items: center; justify-content: center; transition: background 0.2s ease;" onmouseover="this.style.background='rgba(0,0,0,0.9)'" onmouseout="this.style.background='rgba(0,0,0,0.7)'">›</button>
+    </div>
+  </div>
+</div>
+
 <!-- Edit User Modal moved to admin.html -->
 
 <!-- Add Technician Modal moved to admin.html -->
 
 <script>
+// Image modal keyboard navigation
+document.addEventListener('keydown', function(e) {
+  const imageModal = document.getElementById('image-modal');
+  if (imageModal && imageModal.style.display === 'flex') {
+    if (e.key === 'Escape') {
+      window.closeImageModal();
+    } else if (e.key === 'ArrowLeft') {
+      window.navigateImage(-1);
+    } else if (e.key === 'ArrowRight') {
+      window.navigateImage(1);
+    }
+  }
+});
+
+// Close image modal on overlay click
+document.addEventListener('click', function(e) {
+  const imageModal = document.getElementById('image-modal');
+  if (imageModal && imageModal.style.display === 'flex' && e.target === imageModal) {
+    window.closeImageModal();
+  }
+});
+
 // Show logout confirmation with blur background
 function showLogoutConfirmation() {
   const modal = document.getElementById('logout-confirmation');
@@ -1392,5 +1429,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-</html>
 </html>
