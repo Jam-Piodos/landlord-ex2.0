@@ -4199,52 +4199,42 @@ async function showOwnerProfilePopup(area, coords, map, latlng) {
   cardHtml += `<div style='display:flex;gap:0.75rem;margin-top:1rem;'>`+
 
     `<button id='assign-task-${area.id}' style='
-
-      background: var(--warning);
-
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
       color: white;
-
       border: none;
-
-      border-radius: var(--radius);
-
-      padding: 0.75rem 1rem;
-
-      font-weight: 600;
-
+      border-radius: 12px;
+      padding: 0.875rem 1.25rem;
+      font-weight: 700;
+      font-size: 0.9rem;
       cursor: pointer;
-
-      font-size: 0.875rem;
-
-      transition: all 0.2s ease;
-
+      transition: all 0.3s ease;
       flex: 1;
-
-    ' onmouseover="this.style.background='var(--warning-hover)'" onmouseout="this.style.background='var(--warning)'">Survey Land</button>`+
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      letter-spacing: 0.025em;
+    ' onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 25px rgba(99, 102, 241, 0.4)'; this.style.filter='brightness(1.05)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 14px rgba(99, 102, 241, 0.3)'; this.style.filter='brightness(1)'">📋 Assign</button>`+
 
     `<button id='edit-land-${area.id}' style='
-
-      background: white;
-
-      color: var(--neutral-700);
-
-      border: 1px solid var(--neutral-300);
-
-      border-radius: var(--radius);
-
-      padding: 0.75rem 1rem;
-
-      font-weight: 600;
-
+      background: linear-gradient(135deg, #ffffff, #f8fafc);
+      color: #374151;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 0.875rem 1.25rem;
+      font-weight: 700;
+      font-size: 0.9rem;
       cursor: pointer;
-
-      font-size: 0.875rem;
-
-      transition: all 0.2s ease;
-
+      transition: all 0.3s ease;
       flex: 1;
-
-    ' onmouseover="this.style.background='var(--neutral-50)'; this.style.borderColor='var(--primary)'" onmouseout="this.style.background='white'; this.style.borderColor='var(--neutral-300)'">Edit Info</button>`+
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      letter-spacing: 0.025em;
+    ' onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0, 0, 0, 0.12)'; this.style.borderColor='#6366f1'; this.style.background='linear-gradient(135deg, #f8fafc, #f1f5f9)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0, 0, 0, 0.08)'; this.style.borderColor='#e5e7eb'; this.style.background='linear-gradient(135deg, #ffffff, #f8fafc)'">✏️ Edit Info</button>`+
 
   `</div>`;
 
