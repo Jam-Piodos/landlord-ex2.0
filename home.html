@@ -301,6 +301,14 @@
               #global-settings-btn,
               #landholdings-toggle-btn,
               #landarea-panel,
+              .reports-kpis,
+              .reports-grid,
+              .panel,
+              .kpi-card,
+              .panel-header,
+              .panel table,
+              #rep-map-records,
+              #rep-status-brgy,
               #global-settings-menu {
                 display: none !important;
               }
@@ -308,9 +316,9 @@
               /* Show print header */
               .print-header {
                 display: block !important;
-                page-break-after: always;
-                margin-bottom: 30px;
-                padding-bottom: 20px;
+                page-break-after: avoid;
+                margin-bottom: 12px;
+                padding-bottom: 12px;
                 border-bottom: 2px solid #000;
               }
               
@@ -360,51 +368,15 @@
                 display: block !important;
               }
               
-              .reports-kpis,
-              .reports-grid,
-              .panel {
-                background: white !important;
-                border: 1px solid #000 !important;
-                color: #000 !important;
-                box-shadow: none !important;
-              }
-              
-              .kpi-card {
-                background: white !important;
-                border: 1px solid #000 !important;
-                color: #000 !important;
-                box-shadow: none !important;
-              }
-              
-              .kpi-label {
-                color: #000 !important;
-              }
-              
-              .kpi-value {
-                color: #000 !important;
-              }
-              
-              .panel-header {
-                color: #000 !important;
-              }
-              
-              .panel thead th {
-                background: #000 !important;
-                color: #fff !important;
-              }
-              
-              .panel tbody tr {
-                border-bottom: 1px solid #000 !important;
-              }
-              
-              /* Prevent page breaks inside important elements */
-              .panel {
-                page-break-inside: avoid;
-              }
-              
-              .reports-kpis {
-                page-break-inside: avoid;
-              }
+              /* Simple print table layout */
+              .print-simple-table { display: block !important; color:#000; }
+              .print-simple-table h2 { margin: 6px 0 8px; font-size: 18px; font-weight: 700; }
+              .print-simple-table .section-title { margin: 14px 0 6px; font-size: 14px; font-weight: 800; color:#000; text-align:center; }
+              .print-simple-table table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+              .print-simple-table th, .print-simple-table td { border: 1px solid #000; padding: 6px 8px; font-size: 12px; word-wrap: break-word; }
+              .print-simple-table th { background: #f2f2f2; text-align: left; }
+              .print-simple-table .meta { font-size: 12px; margin-bottom: 8px; }
+              .print-simple-table .spacer { height: 12px; }
             }
           </style>
           
@@ -418,6 +390,42 @@
               </div>
               <div class="print-date" id="print-date"></div>
             </div>
+          </div>
+          
+          <!-- Simple Print Table (print-only) -->
+          <div class="print-simple-table" style="display:none;">
+            <h2>Landholding Report Summary</h2>
+            <div class="section-title">Recent Map Records</div>
+            <table aria-label="Recent map records">
+              <thead>
+                <tr>
+                  <th style="width:22%">Date Created</th>
+                  <th style="width:36%">Landowner</th>
+                  <th style="width:26%">Barangay</th>
+                  <th style="width:16%">Status</th>
+                </tr>
+              </thead>
+              <tbody data-print="summary-body">
+                <tr><td colspan="4">Loading…</td></tr>
+              </tbody>
+            </table>
+            <div class="spacer"></div>
+            <div class="section-title">Land Status by Baranggay</div>
+            <table aria-label="Next week action plan">
+              <thead>
+                <tr>
+                  <th style="width:26%">Barangay</th>
+                  <th style="width:16%">Problematic</th>
+                  <th style="width:16%">Workable</th>
+                  <th style="width:32%">Planned Action</th>
+                  <th style="width:10%">Coordinator</th>
+                </tr>
+              </thead>
+              <tbody data-print="plan-body">
+                <tr><td colspan="5">Loading…</td></tr>
+              </tbody>
+            </table>
+            <div class="spacer"></div>
           </div>
           
           <!-- Print Actions -->
@@ -473,10 +481,42 @@
                 });
               }
               function n(v){ try{ return (typeof v==='number'?v:Number(v)).toLocaleString(); }catch{return String(v||'0');} }
+              function weekdayName(d){ try { return new Date(d).toLocaleDateString(undefined,{weekday:'short'}); } catch { return ''; } }
+              function formatDate(d){ try { return new Date(d).toLocaleDateString(); } catch { return ''; } }
+              function renderPrintSimpleTable(){
+                var container = document.querySelector('.print-simple-table');
+                if (!container) return;
+                var sumTbody = container.querySelector('[data-print="summary-body"]');
+                var planTbody = container.querySelector('[data-print="plan-body"]');
+                if (!sumTbody || !planTbody) return;
+                var areas = (window.repAreas||[]);
+                sumTbody.innerHTML = areas.map(function(row){
+                  var date = formatDate(row.created_at);
+                  return '<tr>'+
+                    '<td>'+date+'</td>'+
+                    '<td>'+(row.lo_name||'')+'</td>'+
+                    '<td>'+(row.barangay_name||'')+'</td>'+
+                    '<td>'+String(row.land_status||'workable')+'</td>'+
+                  '</tr>';
+                }).join('') || '<tr><td colspan="4">No recent records.</td></tr>';
+                var brgy = window.repBrgyAgg||{};
+                var planRows = Object.keys(brgy).map(function(k){ return { barangay:k, workable:brgy[k].workable||0, problematic:brgy[k].problematic||0, total:brgy[k].total||0, remarks:(brgy[k].latestRemark||'') }; })
+                  .filter(function(r){ return r.problematic>0; })
+                  .sort(function(a,b){ return b.problematic-a.problematic; });
+                planTbody.innerHTML = planRows.map(function(r){
+                  return '<tr>'+
+                    '<td>'+r.barangay+'</td>'+
+                    '<td>'+r.problematic+'</td>'+
+                    '<td>'+r.workable+'</td>'+
+                    '<td>'+(r.remarks || 'Resolve outstanding cases; verify documents; schedule site visit')+'</td>'+
+                    '<td>Field team</td>'+
+                  '</tr>';
+                }).join('') || '<tr><td colspan="5">No problematic barangays at the moment.</td></tr>';
+              }
               async function loadReports(){
                 const sb = await waitForSupabase();
                 try {
-                  const { data: areas, error: areaErr } = await sb.from('land_areas').select('id, lo_name, barangay_name, land_status, total_area, created_at').order('created_at', { ascending: false });
+                  const { data: areas, error: areaErr } = await sb.from('land_areas').select('id, lo_name, barangay_name, land_status, total_area, created_at, remarks, current_status_desc').order('created_at', { ascending: false });
                   if (areaErr) throw areaErr;
                   const total = (areas||[]).length;
                   let workable=0, problematic=0, totalArea=0;
@@ -487,10 +527,20 @@
                     const areaNum = typeof a.total_area==='number'?a.total_area:parseFloat(a.total_area);
                     if (!isNaN(areaNum)) totalArea += areaNum;
                     const b = (a.barangay_name||'Unspecified').trim();
-                    if (!brgy[b]) brgy[b] = { workable:0, problematic:0, total:0 };
+                    if (!brgy[b]) brgy[b] = { workable:0, problematic:0, total:0, latestRemark:'', latestCreated:0 };
                     brgy[b][s==='problematic'?'problematic':'workable']++;
                     brgy[b].total++;
+                    if (s==='problematic') {
+                      const created = a.created_at ? new Date(a.created_at).getTime() : 0;
+                      if (created >= brgy[b].latestCreated) {
+                        brgy[b].latestCreated = created;
+                        brgy[b].latestRemark = (a.remarks || a.current_status_desc || '').toString();
+                      }
+                    }
                   });
+                  // expose for printing
+                  window.repAreas = areas||[];
+                  window.repBrgyAgg = brgy;
                   document.getElementById('kpi-total-areas').textContent = n(total);
                   document.getElementById('kpi-workable').textContent = n(workable);
                   document.getElementById('kpi-problematic').textContent = n(problematic);
@@ -514,6 +564,8 @@
                     return `<tr><td>${k}</td><td>${n(r.workable)}</td><td>${n(r.problematic)}</td><td>${n(r.total)}</td></tr>`;
                   }).join('');
                   document.querySelector('#rep-status-brgy tbody').innerHTML = brgyRows || '<tr><td colspan="4">No data</td></tr>';
+                  // refresh print content
+                  renderPrintSimpleTable();
                 } catch(e) {
                   document.querySelector('#rep-map-records tbody').innerHTML = `<tr><td colspan="6">Failed to load: ${e.message||'Error'}</td></tr>`;
                   document.querySelector('#rep-status-brgy tbody').innerHTML = `<tr><td colspan="4">Failed to load</td></tr>`;
@@ -538,6 +590,8 @@
               if (dateEl) {
                 dateEl.textContent = 'Generated: ' + new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString();
               }
+              // ensure print content reflects current data
+              try { if (typeof renderPrintSimpleTable === 'function') renderPrintSimpleTable(); } catch {}
               
               // Trigger print dialog
               window.print();
@@ -578,6 +632,10 @@
 
     <main id="map" class="container">
         <div id="mapid" style="width:100vw;height:100vh;min-height:400px;position:fixed;left:0;top:0;border:0;z-index:0;"></div>
+        <style>
+          /* Hide default Leaflet zoom UI (moved controls to custom buttons) */
+          .leaflet-control-zoom { display: none !important; }
+        </style>
         
         <!-- ADD BEARINGS Button - Bottom Right -->
         <button id="add-bearing-btn" class="add-bearing-btn" aria-label="Add land holding" title="Add land holding">
@@ -657,46 +715,54 @@
                   </div>
                   <div class="form-group">
                     <label for="reference-system-select">Reference System <span class="required">*</span></label>
+                    <style>
+                      /* Print won't use this; for UI only */
+                      #reference-system-select option[disabled] {
+                        background: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.18));
+                        color: #1f2937; /* slate-800 */
+                        font-weight: 700;
+                      }
+                    </style>
                     <select id="reference-system-select" class="ll-input" style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #d4d4d4; font-size: 1.05em;" required>
                       <option value="">Select a reference system</option>
-                      <option value="cad867" 
-                              data-cn="30.720" data-ce="30.595"
-                              data-tie-lat-deg="8" data-tie-lat-min="22" data-tie-lat-sec="16.20"
-                              data-tie-lon-deg="124" data-tie-lon-min="51" data-tie-lon-sec="46.971">
-                        BLLM 1, CAD 867 (Cn: 30.720, Ce: 30.595)
-                      </option>
                       <option value="gss549" 
                               data-cn="30.720" data-ce="30.595"
                               data-tie-lat-deg="8" data-tie-lat-min="22" data-tie-lat-sec="16.20"
                               data-tie-lon-deg="124" data-tie-lon-min="51" data-tie-lon-sec="46.971">
-                        BLLM 1, GSS 549 (Cn: 30.720, Ce: 30.595)
+                        BLLM 1, GSS 549
                       </option>
-                      <option value="pls854" 
+                      <option value="cad867" disabled
+                              data-cn="30.720" data-ce="30.595"
+                              data-tie-lat-deg="8" data-tie-lat-min="22" data-tie-lat-sec="16.20"
+                              data-tie-lon-deg="124" data-tie-lon-min="51" data-tie-lon-sec="46.971">
+                        BLLM 1, CAD 867 — (locked formula) 🔒
+                      </option>
+                      <option value="pls854" disabled
                               data-cn="30.713" data-ce="30.588"
                               data-tie-lat-deg="8" data-tie-lat-min="22" data-tie-lat-sec="15.84"
                               data-tie-lon-deg="124" data-tie-lon-min="51" data-tie-lon-sec="45.55">
-                        BLLM 1, PLS 854 (Cn: 30.713, Ce: 30.588)
+                        BLLM 1, PLS 854 — (locked formula) 🔒
                       </option>
-                      <option value="prs92" 
+                      <option value="prs92" disabled
                               data-cn="30.713" data-ce="30.588"
                               data-tie-lat-deg="8" data-tie-lat-min="22" data-tie-lat-sec="15.84"
                               data-tie-lon-deg="124" data-tie-lon-min="51" data-tie-lon-sec="45.55">
-                        BLLM 1, PRS 92 (Cn: 30.713, Ce: 30.588)
+                        BLLM 1, PRS 92 — (locked formula) 🔒
                       </option>
-                      <option value="cad672" 
+                      <option value="cad672" disabled
                               data-cn="30.726" data-ce="30.602"
                               data-tie-lat-deg="8" data-tie-lat-min="22" data-tie-lat-sec="17.10"
                               data-tie-lon-deg="124" data-tie-lon-min="51" data-tie-lon-sec="47.32">
-                        BLLM 1, CAD 672 (Cn: 30.726, Ce: 30.602)
+                        BLLM 1, CAD 672 — (locked formula) 🔒
                       </option>
-                      <option value="cad681" 
+                      <option value="cad681" disabled
                               data-cn="30.728" data-ce="30.610"
                               data-tie-lat-deg="8" data-tie-lat-min="22" data-tie-lat-sec="18.55"
                               data-tie-lon-deg="124" data-tie-lon-min="51" data-tie-lon-sec="48.01">
-                        BLLM 1, CAD 681 (Cn: 30.728, Ce: 30.610)
+                        BLLM 1, CAD 681 — (locked formula) 🔒
                       </option>
                     </select>
-                    <div class="input-help">The system will use the selected constants for coordinate computation</div>
+                    <div class="input-help">Locked entries are view-only.</div>
                   </div>
                 </div>
               </div>
@@ -815,7 +881,7 @@
         ">⚙️</button>
         <!-- Floating Land Holdings toggle (burger) -->
         <button id="landholdings-toggle-btn" aria-label="Toggle Land Holdings" title="Land Holdings" style="
-          position: fixed; top: 12px; right: 70px;
+          position: fixed; top: 12px; left: 16px; right: auto;
           width: 44px; height: 44px; border-radius: 50%;
           background: #ffffff; border: 1px solid #e5e7eb; color: #111;
           display: flex; align-items: center; justify-content: center;
@@ -834,7 +900,7 @@
         <div id="landarea-panel" class="landarea-panel expanded" style="
           position: fixed;
           top: 80px;
-          right: 20px;
+          left: 20px;
           width: 320px;
           max-height: calc(100vh - 100px);
           background: white;
@@ -944,12 +1010,18 @@
             const panel = document.getElementById('landarea-panel');
             if (holdingsBtn && panel) {
               holdingsBtn.addEventListener('click', function(){
-                if (panel.style.display === 'none') {
-                  panel.style.display = 'block';
-                } else {
-                  panel.style.display = 'none';
+                var wasHidden = panel.style.display === 'none' || !panel.style.display;
+                panel.style.display = wasHidden ? 'block' : 'none';
+                var repBtn = document.getElementById('open-reports-btn');
+                if (repBtn) {
+                  var isVisible = panel.style.display === 'block';
+                  // When panel is visible, send reports button behind (lower z-index)
+                  repBtn.style.zIndex = isVisible ? '900' : '1200';
                 }
               });
+              // Ensure correct z-index on initial load
+              var repBtnInit = document.getElementById('open-reports-btn');
+              if (repBtnInit) { repBtnInit.style.zIndex = '1200'; }
             }
             // Wire logout modal buttons
             const logoutYes = document.getElementById('logout-yes');
@@ -991,7 +1063,8 @@
                 maxBoundsViscosity: 0.01, // very flexible bounds
                 minZoom: 5, // allow more zoom out
                 maxZoom: 20,
-                worldCopyJump: false
+                worldCopyJump: false,
+                zoomControl: false
             });
 
             // Add Google Satellite tile layer
