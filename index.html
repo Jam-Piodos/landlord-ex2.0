@@ -141,6 +141,31 @@
                     })();
                   }
                 } catch {}
+                
+                // Log login activity (index.html doesn't load app.js, so log directly)
+                try {
+                  const userName = `${user.user_firstname || ''} ${user.user_lastname || ''}`.trim() || user.username || user.user_email || 'Unknown User';
+                  const now = new Date();
+                  const logEntry = {
+                    operation_name: 'User Login',
+                    status: 'succeeded',
+                    time: now.toLocaleTimeString('en-US', { hour12: false }),
+                    timestamp: now.toISOString(),
+                    user_name: userName
+                  };
+                  console.log('Inserting login activity log:', logEntry);
+                  const { data: logData, error: logError } = await supabase
+                    .from('activity_logs')
+                    .insert([logEntry])
+                    .select();
+                  if (logError) {
+                    console.error('Failed to log login activity:', logError);
+                  } else {
+                    console.log('Login activity logged successfully:', logData);
+                  }
+                } catch (e) {
+                  console.error('Error logging login activity:', e);
+                }
                 if (role === 'office') {
                     showDarSplash('home.html#map');
                     return;

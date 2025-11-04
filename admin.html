@@ -19,7 +19,7 @@
           </div>
         </div>
         <div class="header-actions" style="position:relative;">
-          <button id="admin-settings-btn" aria-label="Settings" title="Settings" class="settings-btn">⚙️</button>
+          <button id="admin-settings-btn" aria-label="Settings" title="Settings" class="settings-btn">Settings</button>
           <div id="admin-settings-menu" class="settings-menu" style="display:none;">
             <button id="admin-logout" class="settings-item danger">Log out</button>
           </div>
@@ -31,18 +31,37 @@
       </div>
     </div>
     <style>
-      :root { --bg: linear-gradient(135deg, #202124 0%, #23272f 100%); --fg:#e4e6eb; --muted:#a6b0a9; --surface:#1e2024; --border:#2a3138; --accent:#f97316; --accent-strong:#ea580c; --accent-weak:#3a2a22; --accent-gradient: linear-gradient(135deg, #ff7a18 0%, #ff3f00 100%); }
-      html, body { background: radial-gradient(1200px 500px at 70% -10%, rgba(255,122,24,0.18), transparent 60%), var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+      :root { 
+        --bg: #f8fafc; 
+        --fg:#111827; 
+        --muted:#6b7280; 
+        --surface:#ffffff; 
+        --border:#e5e7eb; 
+        --accent:#f97316; 
+        --accent-strong:#ea580c; 
+        --accent-weak:#fff4ec; 
+        --accent-gradient: linear-gradient(135deg, #ff7a18 0%, #ff3f00 100%);
+      }
+      
+      html, body { 
+        background: var(--bg); 
+        color: var(--fg); 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
 
-      .admin-header { position: sticky; top: 0; z-index: 3100; background: var(--surface); border-bottom: 1px solid var(--border); }
+      .admin-header { position: sticky; top: 0; z-index: 3100; background: var(--accent-gradient); border-bottom: 1px solid var(--border); }
       .admin-header-inner { width: 100%; margin: 0; padding: 8px 12px; display:flex; align-items:center; justify-content: space-between; }
       .brand { display:flex; align-items:center; gap: 10px; }
-      .brand-logo { width: 42px; height: 42px; border-radius: 8px; background:#fff; padding:4px; border:1px solid var(--border); }
-      .brand-text { color: var(--fg); line-height:1.15; }
-      .brand-title { font-weight:800; letter-spacing:.2px; background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
-      .brand-sub { font-size:.85rem; color: var(--muted); }
-      .settings-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--fg); cursor:pointer; font-size: 18px; transition: background .15s ease, border-color .15s ease, color .15s ease; }
-      .settings-btn:hover { background: #fff; border-color: var(--accent); color: var(--accent-strong); }
+      .brand-logo { width: 42px; height: 42px; border-radius: 8px; background:#fff; padding:4px; border:1px solid rgba(255,255,255,.35); }
+      .brand-text { color: #ffffff; line-height:1.15; }
+      .brand-title { font-weight:800; letter-spacing:.2px; color:#ffffff; }
+      .brand-sub { font-size:.85rem; color: #ffe6d7; }
+      .settings-btn { min-width: 80px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,.35); background: #ffffff; color: #111827; cursor:pointer; font-size: 0.85rem; font-weight: 600; padding: 0 12px; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+      .settings-btn:hover { background: #f3f4f6; border-color: #ffffff; color: var(--accent-strong); }
       .settings-menu { position:absolute; right:0; top:42px; min-width:180px; background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow: 0 8px 24px rgba(15,23,42,.08); padding:6px; z-index:3200; }
       .settings-item { width:100%; text-align:left; background:none; border:none; padding:10px 12px; border-radius:8px; cursor:pointer; font-weight:600; color:var(--fg); transition: background .15s ease, color .15s ease; }
       .settings-item:hover { background: var(--accent-weak); color: var(--accent-strong); }
@@ -50,97 +69,634 @@
 
       .admin-subnav { background: var(--surface); border-top: 1px solid var(--border); position: sticky; top: 54px; z-index: 900; }
       .admin-subnav { display:flex; gap: 20px; padding: 10px 16px; justify-content: center; }
-      .subnav-link { font-weight:700; font-size:.9rem; color:#334155; text-decoration:none; padding:8px 12px; border-radius:8px; transition: color .15s ease, background .15s ease, box-shadow .15s ease; }
+      .subnav-link { font-weight:700; font-size:.9rem; color:#374151; text-decoration:none; padding:8px 12px; border-radius:8px; transition: color .15s ease, background .15s ease, box-shadow .15s ease; }
       .subnav-link:hover { color: var(--accent-strong); background: #fff7ed; }
       .subnav-link:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 3px rgba(249, 115, 22, .35); }
       .subnav-link.active { color: var(--accent-strong); background-image: linear-gradient( to right, rgba(255,122,24,.15), rgba(255,77,0,.12) ); }
 
       /* Admin content spacing */
-      main.container { padding: 20px 16px; }
-      /* Tables inspired by index.html dark theme */
-      .account-table, .activity-log-table { background: rgba(35,39,47,0.98); color: #e4e6eb; border: 1.5px solid #23272f; box-shadow: 0 1px 4px rgba(0,0,0,0.07); border-radius: 8px; overflow: hidden; }
-      .account-table th, .activity-log-table th, .account-table td, .activity-log-table td { padding: 14px 18px; text-align: left; border-bottom: 1px solid #292b32; vertical-align: middle; background: transparent; }
-      .account-table th, .activity-log-table th { background: rgba(35,39,47,0.98); color: #ff7a18; font-size: 1em; font-weight: 700; border-bottom: 1.5px solid #292b32; }
+      main.container { padding: 32px 24px; max-width: 1400px; margin: 0 auto; }
+      
+      /* User Management Header */
+      .user-management-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 32px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      
+      .header-content {
+        flex: 1;
+      }
+      
+      .section-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #111827;
+        margin: 0 0 8px 0;
+        letter-spacing: -0.5px;
+      }
+      
+      .section-subtitle {
+        font-size: 0.95rem;
+        color: #6b7280;
+        margin: 0;
+        font-weight: 400;
+      }
+      
+      .header-actions {
+        display: flex;
+        gap: 12px;
+      }
+      
+      .add-user-btn {
+        background: var(--accent-gradient);
+        color: #ffffff;
+        border: none;
+        border-radius: 10px;
+        padding: 12px 24px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 8px rgba(255, 122, 24, 0.2);
+      }
+      
+      .add-user-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(255, 122, 24, 0.3);
+        filter: brightness(1.05);
+      }
+      
+      .add-user-btn:active {
+        transform: translateY(0);
+      }
+      
+      /* Tables switched to light theme */
+      .account-table, .activity-log-table { background: #ffffff; color: #111827; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-radius: 12px; overflow: hidden; }
+      .account-table th, .activity-log-table th, .account-table td, .activity-log-table td { padding: 16px 20px; text-align: left; border-bottom: 1px solid #f1f5f9; vertical-align: middle; background: transparent; }
+      .account-table th, .activity-log-table th { background: #fafafa; color: #374151; font-size: 0.875rem; font-weight: 600; border-bottom: 1px solid #e5e7eb; text-transform: uppercase; letter-spacing: 0.5px; }
       .account-table tr:last-child td, .activity-log-table tr:last-child td { border-bottom: none; }
+      
+      /* Activity Log Status Styling */
+      .log-status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: capitalize;
+      }
+      
+      .log-status.succeeded {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      
+      .log-status.failed {
+        background: #fee2e2;
+        color: #991b1b;
+      }
 
       /* Inputs and buttons (modals) */
-      #edit-user-modal .modal-content, #add-technician-modal .modal-content { border: 1px solid var(--border); background: var(--surface); }
-      input[type="text"], input[type="email"], select { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: #fff; color: var(--fg); transition: border-color .15s ease, box-shadow .15s ease; }
-      input[type="text"]:hover, input[type="email"]:hover, select:hover { border-color: #f59e0b; }
-      input[type="text"]:focus, input[type="email"]:focus, select:focus { outline: 2px solid transparent; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(249, 115, 22, .25); }
-      .modal-btn { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 10px; padding: 10px 14px; font-weight: 700; transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
-      .modal-btn.save, .add-tech-save-btn { background: var(--accent-gradient); color: #fff; border-color: transparent; }
-      .modal-btn.save:hover, .add-tech-save-btn:hover { filter: saturate(1.05) brightness(1.02); box-shadow: 0 6px 18px rgba(255, 122, 24, .28); }
-      .modal-btn.cancel, .add-tech-cancel-btn { background: #fff; }
-      .modal-btn:hover { border-color: var(--accent); color: var(--accent-strong); }
-      .modal-btn:focus-visible { outline: 2px solid transparent; box-shadow: 0 0 0 3px rgba(249, 115, 22, .35); }
-
-      /* Table hovers aligned to dark theme */
-      .account-table tbody tr:hover, .activity-log-table tbody tr:hover { background: #292b32; color: #ffd7c2; }
-
-      /* Enhanced Search and Filter Section Styles */
-      .search-filter-section {
-        background: rgba(35,39,47,0.98);
-        border: 1.5px solid #23272f;
-        border-radius: 12px;
+      #edit-user-modal, #add-technician-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        z-index: 3000;
+        display: none;
+        align-items: center;
+        justify-content: center;
         padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        transition: all 0.3s ease;
       }
-
-      .search-filter-section:hover {
-        box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-        border-color: #ff7a18;
+      
+      #edit-user-modal.active, #add-technician-modal.active {
+        display: flex;
       }
-
-      .search-filter-header {
+      
+      #edit-user-modal .modal-content, #add-technician-modal .modal-content {
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        max-width: 500px;
+        width: 100%;
+        max-height: 90vh;
+        overflow-y: auto;
+        animation: modalSlideIn 0.3s ease-out;
+      }
+      
+      .modal-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 1px solid #2a3138;
+        padding: 24px 24px 20px;
+        border-bottom: 1px solid #e5e7eb;
       }
-
-      .search-filter-header .section-title {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 0;
-        color: #ff7a18;
-        font-size: 1.1rem;
+      
+      .modal-header h2 {
+        font-size: 1.5rem;
         font-weight: 700;
+        color: #111827;
+        margin: 0;
+        letter-spacing: -0.5px;
       }
-
-      .title-icon {
-        font-size: 1.2rem;
-      }
-
-      .filter-actions {
-        display: flex;
-        gap: 10px;
-      }
-
-      .clear-filters-btn, .save-preset-btn {
+      
+      .close-btn, .modal-close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #6b7280;
+        cursor: pointer;
+        padding: 0;
+        width: 32px;
+        height: 32px;
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 8px 12px;
-        background: var(--surface);
-        border: 1px solid var(--border);
+        justify-content: center;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+      }
+      
+      .close-btn:hover, .modal-close-btn:hover {
+        background: #f3f4f6;
+        color: #111827;
+      }
+      
+      .modal-body {
+        padding: 24px;
+      }
+      
+      .form-group {
+        margin-bottom: 20px;
+      }
+      
+      .form-group label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 8px;
+      }
+      
+      input[type="text"], input[type="email"], select, .modal-input {
+        width: 100%;
+        border: 1px solid #e5e7eb;
         border-radius: 8px;
-        color: var(--fg);
-        font-size: 0.85rem;
+        padding: 10px 14px;
+        background: #ffffff;
+        color: #111827;
+        font-size: 0.9375rem;
+        transition: all 0.2s ease;
+      }
+      
+      input[type="text"]:hover, input[type="email"]:hover, select:hover, .modal-input:hover {
+        border-color: #d1d5db;
+      }
+      
+      input[type="text"]:focus, input[type="email"]:focus, select:focus, .modal-input:focus {
+        outline: none;
+        border-color: #ff7a18;
+        box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.1);
+      }
+      
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        padding: 20px 24px;
+        border-top: 1px solid #e5e7eb;
+      }
+      
+      .modal-btn {
+        border: 1px solid #e5e7eb;
+        background: #ffffff;
+        color: #374151;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-size: 0.875rem;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s ease;
       }
+      
+      .modal-btn.cancel, .add-tech-cancel-btn {
+        background: #ffffff;
+        border-color: #e5e7eb;
+      }
+      
+      .modal-btn.cancel:hover, .add-tech-cancel-btn:hover {
+        background: #f9fafb;
+        border-color: #d1d5db;
+      }
+      
+      .modal-btn.save, .add-tech-save-btn {
+        background: var(--accent-gradient);
+        color: #ffffff;
+        border-color: transparent;
+        box-shadow: 0 2px 8px rgba(255, 122, 24, 0.2);
+      }
+      
+      .modal-btn.save:hover, .add-tech-save-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(255, 122, 24, 0.3);
+        filter: brightness(1.05);
+      }
+      
+      .modal-btn:focus-visible {
+        outline: 2px solid transparent;
+        box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.2);
+      }
+      
+      @keyframes modalSlideIn {
+        from {
+          opacity: 0;
+          transform: scale(0.95) translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+
+      /* Table hovers aligned to light theme */
+      .account-table tbody tr:hover, .activity-log-table tbody tr:hover { background: #f9fafb; color: #111827; transition: background 0.15s ease; }
+      
+      /* Users Table Container */
+      .users-table-container {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        overflow: hidden;
+        margin-bottom: 24px;
+      }
+      
+      .table-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+        background: #fafafa;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      
+      .table-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #111827;
+        margin: 0;
+      }
+      
+      .table-actions {
+        display: flex;
+        gap: 8px;
+      }
+      
+      .table-action-btn {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      
+      .table-action-btn:hover {
+        background: #f9fafb;
+        border-color: #d1d5db;
+        color: #111827;
+      }
+      
+      .table-wrapper {
+        overflow-x: auto;
+        max-height: 600px;
+        overflow-y: auto;
+      }
+      
+      .modern-users-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: transparent;
+      }
+      
+      .modern-users-table thead th {
+        background: #fafafa;
+        color: #374151;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 12px 20px;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .modern-users-table tbody td {
+        padding: 16px 20px;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.875rem;
+        color: #111827;
+      }
+      
+      .modern-users-table tbody tr:hover {
+        background: #f9fafb;
+      }
+      
+      .modern-users-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      
+      .user-cell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #e5e7eb;
+      }
+      
+      .user-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      
+      .user-name {
+        font-weight: 600;
+        color: #111827;
+        font-size: 0.875rem;
+      }
+      
+      .user-email {
+        font-size: 0.75rem;
+        color: #6b7280;
+      }
+      
+      .role-badge, .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: capitalize;
+      }
+      
+      .role-badge.admin {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      
+      .role-badge.technician {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      
+      .role-badge.user, .role-badge.office {
+        background: #e0e7ff;
+        color: #3730a3;
+      }
+      
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      
+      .status-dot.active {
+        background: #10b981;
+      }
+      
+      .status-dot.suspended {
+        background: #ef4444;
+      }
+      
+      .status-badge.active {
+        color: #065f46;
+        background: #d1fae5;
+      }
+      
+      .status-badge.suspended {
+        color: #991b1b;
+        background: #fee2e2;
+      }
+      
+      .user-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      
+      .action-btn {
+        padding: 6px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #374151;
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      
+      .action-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .action-btn.edit {
+        border-color: #3b82f6;
+        color: #3b82f6;
+      }
+      
+      .action-btn.edit:hover {
+        background: #eff6ff;
+        border-color: #2563eb;
+        color: #2563eb;
+      }
+      
+      .action-btn.suspend, .action-btn.unsuspend {
+        border-color: #f59e0b;
+        color: #f59e0b;
+      }
+      
+      .action-btn.suspend:hover, .action-btn.unsuspend:hover {
+        background: #fffbeb;
+        border-color: #d97706;
+        color: #d97706;
+      }
+      
+      .action-btn.delete {
+        border-color: #ef4444;
+        color: #ef4444;
+      }
+      
+      .action-btn.delete:hover {
+        background: #fef2f2;
+        border-color: #dc2626;
+        color: #dc2626;
+      }
+      
+      .last-active {
+        font-size: 0.875rem;
+        color: #6b7280;
+      }
+      
+      /* Empty State */
+      .empty-state {
+        text-align: center;
+        padding: 64px 32px;
+        color: #6b7280;
+      }
+      
+      .empty-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #111827;
+        margin: 0 0 8px 0;
+      }
+      
+      .empty-message {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin: 0 0 24px 0;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      
+      .empty-action-btn {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      
+      .empty-action-btn:hover {
+        background: #f9fafb;
+        border-color: #d1d5db;
+        color: #111827;
+      }
+      
+      /* Loading State */
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.9);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        z-index: 5000;
+      }
+      
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e5e7eb;
+        border-top-color: #ff7a18;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      .loading-text {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin: 0;
+      }
+
+      /* Enhanced Search and Filter Section Styles */
+      .search-filter-section {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        transition: all 0.2s ease;
+      }
+
+      .search-filter-section:focus-within {
+        box-shadow: 0 2px 8px rgba(255, 122, 24, 0.1);
+        border-color: #ff7a18;
+      }
+
+      .search-filter-header {
+        margin-bottom: 16px;
+      }
+
+      .search-filter-header .section-title {
+        margin: 0;
+        color: #111827;
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+      }
+
+      .title-icon {
+        display: none;
+      }
+      
+      .empty-icon {
+        display: none;
+      }
+
+      .clear-filters-btn, .save-preset-btn {
+        padding: 8px 16px;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        color: #374151;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
 
       .clear-filters-btn:hover {
-        background: #dc2626;
-        border-color: #dc2626;
-        color: #fff;
+        background: #fef2f2;
+        border-color: #fca5a5;
+        color: #dc2626;
       }
 
       .save-preset-btn:hover {
@@ -152,24 +708,34 @@
       .search-filter-content {
         display: flex;
         flex-direction: column;
-        gap: 20px;
+        gap: 16px;
       }
 
       /* Enhanced Search Bar */
       .search-container {
         position: relative;
-        flex: 1;
+        width: 100%;
+      }
+      
+      .search-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
       }
 
       .search-input-wrapper {
         position: relative;
         display: flex;
         align-items: center;
-        background: #fff;
-        border: 2px solid #e5e7eb;
-        border-radius: 12px;
-        transition: all 0.3s ease;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        transition: all 0.2s ease;
         overflow: hidden;
+      }
+
+      .search-input-wrapper:hover {
+        border-color: #d1d5db;
       }
 
       .search-input-wrapper:focus-within {
@@ -179,12 +745,14 @@
 
       .search-input {
         flex: 1;
-        padding: 14px 50px 14px 16px;
+        padding: 12px 48px 12px 16px;
         border: none;
         background: transparent;
-        font-size: 1rem;
-        color: #1f2937;
+        font-size: 0.9375rem;
+        color: #111827;
         outline: none;
+        width: 100%;
+        min-width: 0;
       }
 
       .search-input::placeholder {
@@ -192,18 +760,16 @@
       }
 
       .search-icon {
-        position: absolute;
-        right: 16px;
-        font-size: 1.1rem;
-        color: #6b7280;
-        pointer-events: none;
+        display: none;
       }
 
       .clear-search-btn {
         position: absolute;
-        right: 40px;
-        width: 24px;
-        height: 24px;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 28px;
+        height: 28px;
         border: none;
         background: #ef4444;
         color: #fff;
@@ -212,17 +778,19 @@
         display: none;
         align-items: center;
         justify-content: center;
-        font-size: 12px;
+        font-size: 16px;
+        font-weight: 600;
         transition: all 0.2s ease;
+        z-index: 10;
+      }
+      
+      .clear-search-btn.show {
+        display: flex;
       }
 
       .clear-search-btn:hover {
         background: #dc2626;
-        transform: scale(1.1);
-      }
-
-      .clear-search-btn.show {
-        display: flex;
+        transform: translateY(-50%) scale(1.1);
       }
 
       .search-suggestions {
@@ -272,14 +840,14 @@
       .filter-label {
         font-size: 0.9rem;
         font-weight: 600;
-        color: #e4e6eb;
+        color: #111827;
         margin-bottom: 4px;
       }
 
       .filter-select {
         padding: 10px 12px;
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: 10px;
         background: #fff;
         color: #1f2937;
         font-size: 0.9rem;
@@ -304,14 +872,14 @@
         gap: 12px;
         flex-wrap: wrap;
         padding: 12px 0;
-        border-top: 1px solid #2a3138;
-        border-bottom: 1px solid #2a3138;
+        border-top: 1px solid #e5e7eb;
+        border-bottom: 1px solid #e5e7eb;
       }
 
       .quick-filter-label {
         font-size: 0.9rem;
         font-weight: 600;
-        color: #e4e6eb;
+        color: #111827;
         margin-right: 8px;
       }
 
@@ -466,14 +1034,26 @@
 
       /* Responsive Design */
       @media (max-width: 768px) {
-        .search-filter-header {
-          flex-direction: column;
-          gap: 12px;
-          align-items: stretch;
+        main.container {
+          padding: 20px 16px;
         }
-
-        .filter-actions {
-          justify-content: center;
+        
+        .user-management-header {
+          flex-direction: column;
+          gap: 16px;
+          align-items: flex-start;
+        }
+        
+        .search-filter-section {
+          padding: 20px;
+        }
+        
+        .search-actions {
+          justify-content: stretch;
+        }
+        
+        .clear-filters-btn {
+          width: 100%;
         }
 
         .filter-container {
@@ -504,13 +1084,34 @@
         }
 
         .search-input {
-          padding: 12px 40px 12px 12px;
-          font-size: 0.9rem;
+          padding: 10px 44px 10px 12px;
+          font-size: 0.875rem;
+        }
+        
+        .clear-search-btn {
+          width: 24px;
+          height: 24px;
+          font-size: 14px;
+          right: 6px;
         }
 
         .quick-filter-chip {
           font-size: 0.8rem;
           padding: 4px 8px;
+        }
+        
+        .table-header {
+          flex-direction: column;
+          gap: 12px;
+          align-items: stretch;
+        }
+        
+        .table-actions {
+          width: 100%;
+        }
+        
+        .table-action-btn {
+          flex: 1;
         }
       }
       
@@ -670,15 +1271,13 @@
         <div class="user-management-header">
             <div class="header-content">
                 <h2 class="section-title">
-                    <span class="title-icon">👥</span>
                     User Management
                 </h2>
                 <p class="section-subtitle">Manage system users, roles, and permissions</p>
             </div>
             <div class="header-actions">
                 <button id="add-technician-btn" class="add-user-btn">
-                    <span class="btn-icon">+</span>
-                    <span class="btn-text">Add User</span>
+                    Add User
                 </button>
             </div>
         </div>
@@ -687,16 +1286,7 @@
         <!-- Enhanced Search Section -->
         <div class="search-filter-section">
             <div class="search-filter-header">
-                <h3 class="section-title">
-                    <span class="title-icon">🔍</span>
-                    Search Users
-                </h3>
-                <div class="filter-actions">
-                    <button id="clear-all-filters" class="clear-filters-btn" title="Clear search">
-                        <span class="btn-icon">🗑️</span>
-                        Clear
-                    </button>
-                </div>
+                <h3 class="section-title">Search Users</h3>
             </div>
             
             <div class="search-filter-content">
@@ -705,13 +1295,17 @@
                     <div class="search-input-wrapper">
                         <input type="text" id="user-search" class="search-input" placeholder="Search users by name, email, or role...">
                         <button id="clear-search" class="clear-search-btn" title="Clear search">
-                            <span class="clear-icon">✕</span>
+                            <span class="clear-icon">×</span>
                         </button>
-                        <span class="search-icon">🔍</span>
                     </div>
                     <div class="search-suggestions" id="search-suggestions" style="display: none;">
                         <!-- Search suggestions will be populated by JavaScript -->
                     </div>
+                </div>
+                <div class="search-actions">
+                    <button id="clear-all-filters" class="clear-filters-btn" title="Clear all filters">
+                        Clear Filters
+                    </button>
                 </div>
             </div>
         </div>
@@ -722,11 +1316,9 @@
                 <h3 class="table-title">System Users</h3>
                 <div class="table-actions">
                     <button class="table-action-btn export-btn">
-                        <span class="btn-icon">📊</span>
                         Export
                     </button>
                     <button class="table-action-btn refresh-btn" id="refresh-users">
-                        <span class="btn-icon">🔄</span>
                         Refresh
                     </button>
                 </div>
@@ -775,7 +1367,6 @@
             
             <!-- Empty State -->
             <div class="empty-state" id="users-empty-state" style="display: none;">
-                <div class="empty-icon">👤</div>
                 <h3 class="empty-title">No Users Found</h3>
                 <p class="empty-message">No users match your current search criteria. Try adjusting your filters or search terms.</p>
                 <button class="empty-action-btn" onclick="document.getElementById('user-search').value = ''; document.getElementById('role-filter').value = ''; document.getElementById('status-filter').value = ''; filterUsers();">
@@ -797,6 +1388,7 @@
             <thead>
                 <tr>
                     <th>Operation name</th>
+                    <th>User</th>
                     <th>Status</th>
                     <th>Time</th>
                     <th>Time stamp</th>
@@ -896,6 +1488,13 @@
       document.querySelectorAll('main.container').forEach(function(section){ section.style.display = 'none'; });
       var el = document.getElementById(sectionId);
       if (el) el.style.display = 'block';
+      
+      // Load activity logs when navigating to workspace
+      if (sectionId === 'workspace') {
+        if (typeof fetchAndRenderActivityLogs === 'function') {
+          fetchAndRenderActivityLogs();
+        }
+      }
     }
     
     // Logout functions with blur effect
@@ -966,6 +1565,15 @@
       function setActive(id){ links.forEach(function(a){ a.classList.toggle('active', a.getAttribute('data-target')===id); }); }
       setActive(hash || 'profile');
       links.forEach(function(a){ a.addEventListener('click', function(){ setActive(a.getAttribute('data-target')); }); });
+      
+      // Load activity logs if workspace is initially visible
+      if (hash === 'workspace') {
+        setTimeout(function() {
+          if (typeof fetchAndRenderActivityLogs === 'function') {
+            fetchAndRenderActivityLogs();
+          }
+        }, 500);
+      }
     });
     </script>
 
@@ -1085,15 +1693,15 @@
                 <td>
                     <div class="user-actions">
                         <button class="action-btn edit" onclick="editUser(${user.id})" title="Edit User">
-                            ✏️ Edit
+                            Edit
                         </button>
                         <button class="action-btn ${user.status === 'suspended' ? 'unsuspend' : 'suspend'}" 
                                 onclick="toggleUserStatus(${user.id})" 
                                 title="${user.status === 'suspended' ? 'Unsuspend' : 'Suspend'} User">
-                            ${user.status === 'suspended' ? '✅ Unsuspend' : '⛔ Suspend'}
+                            ${user.status === 'suspended' ? 'Unsuspend' : 'Suspend'}
                         </button>
                         <button class="action-btn delete" onclick="deleteUser(${user.id})" title="Delete User">
-                            🗑️ Delete
+                            Delete
                         </button>
                     </div>
                 </td>
@@ -1371,12 +1979,7 @@
 
     // Helper functions
     function getRoleIcon(role) {
-        const icons = {
-            admin: '⚡',
-            technician: '🔧',
-            user: '👤'
-        };
-        return icons[role] || '👤';
+        return ''; // No icons, minimalist design
     }
 
     function capitalizeFirst(str) {

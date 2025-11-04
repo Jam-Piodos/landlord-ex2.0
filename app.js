@@ -75,13 +75,36 @@ function hardRedirectToLogin() {
   window.location.replace('index.html');
 }
 
+// Session validation function
+async function validateSession() {
+  try {
+    if (!isLoggedIn()) return false;
+    const raw = localStorage.getItem('ll_current_user');
+    const sess = sessionStorage.getItem('ll_session');
+    if (!raw || !sess) return false;
+    const user = JSON.parse(raw);
+    const userId = user?.user_id;
+    if (!userId) return false;
+    // allow dev backdoor admin (user_id = -1) without DB validation
+    const roleLower = String(user?.role || '').toLowerCase();
+    if (userId === -1 && roleLower === 'admin') return true;
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id, role, active')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error || !data || data.active === false) return false;
+    return true;
+  } catch { return false; }
+}
+
 function enforceAuthGuard() {
   const path = (window.location.pathname || '').toLowerCase();
   const isHome = path.endsWith('/home.html') || path.endsWith('home.html');
   const isAdmin = path.endsWith('/admin.html') || path.endsWith('admin.html');
 
   if (isHome || isAdmin) {
-    // Must be logged in
+    // Immediate auth check - must be logged in
     if (!isLoggedIn()) { hardRedirectToLogin(); return; }
     // Role-based checks
     if (isHome && !hasRole(['office'])) { hardRedirectToLogin(); return; }
@@ -89,53 +112,145 @@ function enforceAuthGuard() {
 
     // Online validation against Supabase to prevent localStorage spoofing
     (async () => {
-      try {
-        const raw = localStorage.getItem('ll_current_user');
-        const sess = sessionStorage.getItem('ll_session');
-        if (!raw || !sess) return hardRedirectToLogin();
+      const isValid = await validateSession();
+      if (!isValid) {
+        window.llLogout();
+        return;
+      }
+      // Re-check roles after validation
+      const raw = localStorage.getItem('ll_current_user');
+      if (raw) {
         const user = JSON.parse(raw);
-        const userId = user?.user_id;
-        if (!userId) return hardRedirectToLogin();
-        // allow dev backdoor admin (user_id = -1) without DB validation
-        const roleLower = String(user?.role || '').toLowerCase();
-        if (userId === -1 && roleLower === 'admin') return; 
-        const { data, error } = await supabase
-          .from('users')
-          .select('user_id, role, active')
-          .eq('user_id', userId)
-          .maybeSingle();
-        if (error || !data || data.active === false) return window.llLogout();
-        const role = String(data.role || '').toLowerCase();
-        if (isHome && role !== 'office') return window.llLogout();
-        if (isAdmin && !(role === 'office' || role === 'admin')) return window.llLogout();
-      } catch { return window.llLogout(); }
+        const role = String(user?.role || '').toLowerCase();
+        if (isHome && role !== 'office') { window.llLogout(); return; }
+        if (isAdmin && !(role === 'office' || role === 'admin')) { window.llLogout(); return; }
+      }
     })();
 
-    // Mitigate back/alt+arrow navigation re-entry
-    try { history.pushState({ guard: true }, document.title, window.location.href); } catch {}
-    window.addEventListener('popstate', function() {
-      if (!isLoggedIn()) { hardRedirectToLogin(); return; }
-      // If user tries to navigate back into login, push forward to current protected page
-      try { history.go(1); } catch {}
+    // Prevent back navigation - replace current history entry
+    try {
+      history.replaceState({ authenticated: true, timestamp: Date.now() }, '', window.location.href);
+      // Push a dummy state to prevent back navigation
+      history.pushState({ authenticated: true, timestamp: Date.now() }, '', window.location.href);
+    } catch {}
+
+    // Handle browser back button
+    window.addEventListener('popstate', function(e) {
+      // Always validate session on back navigation
+      if (!isLoggedIn()) {
+        hardRedirectToLogin();
+        return;
+      }
+      // If navigating back, validate and redirect if invalid
+      validateSession().then(isValid => {
+        if (!isValid) {
+          hardRedirectToLogin();
+          return;
+        }
+        // If valid but trying to go back, push forward
+        try {
+          history.pushState({ authenticated: true, timestamp: Date.now() }, '', window.location.href);
+          // Prevent going back to login page
+          if (window.location.pathname.includes('index.html')) {
+            history.replaceState(null, '', window.location.href);
+            window.location.replace(isHome ? 'home.html#map' : 'admin.html#profile');
+          }
+        } catch {}
+      });
     });
+
+    // Prevent keyboard navigation shortcuts
     window.addEventListener('keydown', function(e) {
       // Prevent Backspace navigation when not editing an input
-      if (e.key === 'Backspace' && !isEditableElement(e.target)) { e.preventDefault(); }
+      if (e.key === 'Backspace' && !isEditableElement(e.target) && !e.target.isContentEditable) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       // Prevent Alt+Left/Right nav
-      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); }
-    }, { capture: true });
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      // Prevent Ctrl+H (history) and Ctrl+Shift+Delete
+      if (e.ctrlKey && e.shiftKey && e.key === 'Delete') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, { capture: true, passive: false });
+
+    // Validate session when page becomes visible (user switches tabs/windows)
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) {
+        // Page became visible, validate session
+        if (!isLoggedIn()) {
+          hardRedirectToLogin();
+          return;
+        }
+        validateSession().then(isValid => {
+          if (!isValid) {
+            window.llLogout();
+          }
+        });
+      }
+    });
+
+    // Validate session periodically (every 30 seconds)
+    const sessionCheckInterval = setInterval(async () => {
+      if (!isLoggedIn()) {
+        clearInterval(sessionCheckInterval);
+        hardRedirectToLogin();
+        return;
+      }
+      const isValid = await validateSession();
+      if (!isValid) {
+        clearInterval(sessionCheckInterval);
+        window.llLogout();
+      }
+    }, 30000);
+
+    // Clear interval on page unload
+    window.addEventListener('beforeunload', function() {
+      clearInterval(sessionCheckInterval);
+    });
+
+    // Detect cross-tab logout (when session is cleared in another tab)
+    window.addEventListener('storage', function(e) {
+      if (e.key === 'll_current_user' && !e.newValue) {
+        // Session was cleared in another tab
+        clearInterval(sessionCheckInterval);
+        hardRedirectToLogin();
+      }
+      if (e.key === 'll_session' && !e.newValue) {
+        // Session token was cleared in another tab
+        clearInterval(sessionCheckInterval);
+        hardRedirectToLogin();
+      }
+    });
+
+    // Note: Context menu prevention removed - it breaks legitimate functionality
+    // Users can still right-click, but back navigation is prevented
   }
 }
 
-// Run guard ASAP
+// Run guard immediately - don't wait for DOM
+enforceAuthGuard();
+
+// Also run on DOMContentLoaded as backup
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', enforceAuthGuard, { once: true });
-} else {
-  enforceAuthGuard();
 }
 
 // Global logout helper for all pages
-window.llLogout = function() {
+window.llLogout = async function() {
+  // Log logout activity before clearing session (so we can capture user name)
+  try {
+    if (typeof logActivity === 'function') {
+      await logActivity('User Logout', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
+    }
+  } catch (e) {
+    console.error('Failed to log logout activity:', e);
+  }
+  // Clear session after logging
   try { localStorage.removeItem('ll_current_user'); } catch {}
   try { sessionStorage.removeItem('ll_session'); } catch {}
   hardRedirectToLogin();
@@ -245,7 +360,11 @@ async function saveAccountSettings() {
     .eq('user_id', user.user_id)
     .select('user_id, username, user_email, user_firstname, user_lastname, role, active')
     .maybeSingle();
-  if (error) { alert('Failed to update account: ' + error.message); return; }
+    if (error) { 
+      await logActivity('Update Account Settings', 'failed', new Date().toLocaleTimeString('en-US', { hour12: false }));
+      alert('Failed to update account: ' + error.message); 
+      return; 
+    }
   if (updated) {
     try { localStorage.setItem('ll_current_user', JSON.stringify(updated)); } catch {}
     // reflect text values immediately
@@ -255,6 +374,7 @@ async function saveAccountSettings() {
       document.getElementById('acc-lastname-value').textContent = updated.user_lastname || '';
       document.getElementById('acc-email-value').textContent = updated.user_email || '';
     } catch {}
+    await logActivity('Update Account Settings', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
   }
   closeAccountSettingsModal();
   alert('Account updated successfully.');
@@ -1305,11 +1425,8 @@ async function drawLandAreas(map) {
       // Main polygon with fill (clickable)
 
       const polygon = L.polygon(coords, {
-
         color: 'green',
-
         fillOpacity: 0.1
-
       }).addTo(map);
 
       // Attach click handler to this polygon
@@ -1344,20 +1461,15 @@ async function drawLandAreas(map) {
 
       if (latLng) {
 
+        const baseIsOSM = (window.currentBase === 'osm');
+        const pointColor = baseIsOSM ? '#000000' : '#cfd4d9';
         const marker = L.circleMarker(latLng, {
-
           radius: 8,
-
-          color: '#fff',
-
-          fillColor: '#fff',
-
+          color: pointColor,
+          fillColor: pointColor,
           fillOpacity: 1,
-
           weight: 2,
-
           opacity: 1
-
         }).addTo(map);
 
         // Compute NE and distance from the reference origin for each vertex
@@ -1388,25 +1500,94 @@ async function drawLandAreas(map) {
 
 
 
+// Activity logging utility function
+async function logActivity(operationName, status = 'succeeded', time = null) {
+  try {
+    if (!window.supabase && !window.supabaseClient) {
+      console.warn('Supabase client not available for activity logging');
+      return;
+    }
+    
+    const client = window.supabaseClient || window.supabase;
+    if (!client || !client.from) {
+      console.warn('Supabase client not properly initialized');
+      return;
+    }
+    
+    // Get current user name from localStorage
+    let userName = 'Unknown User';
+    try {
+      const raw = localStorage.getItem('ll_current_user');
+      if (raw) {
+        const user = JSON.parse(raw);
+        if (user) {
+          // Try to get full name first, then username, then email
+          const firstName = user.user_firstname || '';
+          const lastName = user.user_lastname || '';
+          if (firstName || lastName) {
+            userName = `${firstName} ${lastName}`.trim();
+          } else if (user.username) {
+            userName = user.username;
+          } else if (user.user_email) {
+            userName = user.user_email;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not get user name for activity log:', e);
+    }
+    
+    const now = new Date();
+    const logEntry = {
+      operation_name: operationName,
+      status: status,
+      time: time || now.toLocaleTimeString('en-US', { hour12: false }),
+      timestamp: now.toISOString(),
+      user_name: userName
+    };
+    
+    const { error } = await client
+      .from('activity_logs')
+      .insert([logEntry]);
+    
+    if (error) {
+      console.error('Failed to log activity:', error);
+    }
+  } catch (error) {
+    console.error('Error in logActivity:', error);
+  }
+}
+
+// Make logActivity globally accessible
+window.logActivity = logActivity;
+
 async function fetchAndRenderActivityLogs() {
 
   const tableBody = document.querySelector('#workspace .activity-log-table tbody');
 
   if (!tableBody) return;
 
-  tableBody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+  tableBody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
 
-  const { data: logs, error } = await supabase
+  const client = window.supabaseClient || window.supabase;
+  if (!client) {
+    tableBody.innerHTML = `<tr><td colspan="5">Database connection not available.</td></tr>`;
+    return;
+  }
+
+  const { data: logs, error } = await client
 
     .from('activity_logs')
 
     .select('*')
 
-    .order('timestamp', { ascending: false });
+    .order('timestamp', { ascending: false })
+
+    .limit(100);
 
   if (error) {
 
-    tableBody.innerHTML = `<tr><td colspan="4">Error loading logs.</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="5">Error loading logs: ${error.message}</td></tr>`;
 
     return;
 
@@ -1414,27 +1595,25 @@ async function fetchAndRenderActivityLogs() {
 
   if (!logs || logs.length === 0) {
 
-    tableBody.innerHTML = `<tr><td colspan="4">No logs found.</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="5">No logs found.</td></tr>`;
 
     return;
 
   }
 
-  tableBody.innerHTML = logs.map(log => `
-
+  tableBody.innerHTML = logs.map(log => {
+    const timestamp = log.timestamp ? new Date(log.timestamp).toLocaleString() : '';
+    const statusClass = log.status === 'succeeded' ? 'succeeded' : 'failed';
+    return `
     <tr>
-
       <td>${log.operation_name || ''}</td>
-
-      <td><span class="log-status succeeded">${log.status || ''}</span></td>
-
+      <td>${log.user_name || 'Unknown User'}</td>
+      <td><span class="log-status ${statusClass}">${log.status || ''}</span></td>
       <td>${log.time || ''}</td>
-
-      <td>${log.timestamp || ''}</td>
-
+      <td>${timestamp}</td>
     </tr>
-
-  `).join('');
+  `;
+  }).join('');
 
 }
 
@@ -3361,13 +3540,14 @@ async function saveSurveyToDatabase(latLngPoints, surveyPoints, startPoint) {
     if (error) {
 
       console.error('Error saving survey to database:', error);
-
+      await logActivity('Add Land Holding', 'failed', new Date().toLocaleTimeString('en-US', { hour12: false }));
       alert('Failed to save to database: ' + (error.message || JSON.stringify(error)));
 
     } else {
 
       console.log('Survey saved successfully:', data);
-
+      const loName = (document.getElementById('lo-name-input')?.value || '').trim() || 'Unknown';
+      await logActivity(`Add Land Holding - ${loName}`, 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
       
 
       // Refresh the land areas list to show the new survey
@@ -4271,7 +4451,14 @@ function showAssignTaskModal(area) {
       p_notes: notes
     });
 
-    if (error) { alert('Failed to assign task: ' + error.message); return; }
+    if (error) { 
+      await logActivity('Assign Survey Task', 'failed', new Date().toLocaleTimeString('en-US', { hour12: false }));
+      alert('Failed to assign task: ' + error.message); 
+      return; 
+    }
+
+    const loName = area?.lo_name || 'Unknown';
+    await logActivity(`Assign Survey Task - ${loName}`, 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
 
     modal.style.display = 'none';
 
@@ -4425,7 +4612,13 @@ function showEditLandInfoModal(area) {
 
       .maybeSingle();
 
-    if (error) { console.error('Update failed:', error); alert('Failed to update land info: ' + error.message); return; }
+    if (error) { 
+      console.error('Update failed:', error); 
+      const loName = area?.lo_name || 'Unknown';
+      await logActivity(`Edit Land Information - ${loName}`, 'failed', new Date().toLocaleTimeString('en-US', { hour12: false }));
+      alert('Failed to update land info: ' + error.message); 
+      return; 
+    }
 
     if (!updated) {
 
@@ -4433,13 +4626,20 @@ function showEditLandInfoModal(area) {
 
       const { data: exists } = await supabase.from('land_areas').select('id').eq('id', landId).maybeSingle();
 
-      if (!exists) { alert('Land area not found.'); return; }
+      if (!exists) { 
+        await logActivity('Edit Land Information', 'failed', new Date().toLocaleTimeString('en-US', { hour12: false }));
+        alert('Land area not found.'); 
+        return; 
+      }
 
       alert('Update didn\'t persist (likely RLS policy or no changed values).');
 
       return;
 
     }
+    
+    const loName = updated?.lo_name || area?.lo_name || 'Unknown';
+    await logActivity(`Edit Land Information - ${loName}`, 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
 
     modal.style.display = 'none';
 
@@ -4850,6 +5050,21 @@ let selectedReferenceSystem = {
   tieLonSec: 46.971
 };
 
+// Update circle marker colors based on current base layer
+window.updatePointColors = function() {
+  try {
+    const isOSM = (window.currentBase === 'osm');
+    const color = isOSM ? '#000000' : '#cfd4d9';
+    if (window.leafletMap) {
+      window.leafletMap.eachLayer(function(layer){
+        if (layer && layer.setStyle && layer instanceof L.CircleMarker) {
+          try { layer.setStyle({ color: color, fillColor: color }); } catch {}
+        }
+      });
+    }
+  } catch {}
+};
+
 // Override the original showBearingsModal function
 function showBearingsModalMultiStep() {
   if (bearingsModal) {
@@ -4869,11 +5084,18 @@ function resetModalToStep1() {
   
   // Reset reference system
   const refSystemSelect = document.getElementById('reference-system-select');
-  if (refSystemSelect) refSystemSelect.value = '';
+  if (refSystemSelect) {
+    refSystemSelect.value = 'gss549'; // Set default to gss549
+    // Update custom dropdown label
+    const rsLabel = document.getElementById('rs-selected-label');
+    if (rsLabel) rsLabel.textContent = 'BLLM 1, GSS 549';
+    // Trigger change event to update validation
+    refSystemSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  }
   
   // Reset to default reference system
   selectedReferenceSystem = {
-    name: 'cad867',
+    name: 'gss549',
     cn: 30.720,
     ce: 30.595,
     tieLatDeg: 8,
@@ -4932,6 +5154,14 @@ function showStep(stepNumber) {
   const modalSubtitle = document.getElementById('modal-subtitle');
   if (modalTitle) modalTitle.textContent = titles[stepNumber].title;
   if (modalSubtitle) modalSubtitle.textContent = titles[stepNumber].subtitle;
+  
+  // Validate the current step after showing it
+  if (stepNumber === 2) {
+    // Ensure default value is set and validated
+    setTimeout(() => {
+      validateCurrentStep();
+    }, 100);
+  }
 }
 
 function updateProgressIndicator() {

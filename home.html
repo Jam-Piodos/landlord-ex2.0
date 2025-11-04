@@ -584,7 +584,7 @@
             })();
             
             // Print and PDF Download Functions
-            window.printReport = function() {
+            window.printReport = async function() {
               // Update print date
               const dateEl = document.getElementById('print-date');
               if (dateEl) {
@@ -593,15 +593,33 @@
               // ensure print content reflects current data
               try { if (typeof renderPrintSimpleTable === 'function') renderPrintSimpleTable(); } catch {}
               
+              // Log print action
+              try {
+                if (typeof window.logActivity === 'function') {
+                  await window.logActivity('Print Report', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
+                }
+              } catch (e) {
+                console.error('Failed to log print activity:', e);
+              }
+              
               // Trigger print dialog
               window.print();
             };
             
-            window.downloadPDF = function() {
+            window.downloadPDF = async function() {
               // Update print date
               const dateEl = document.getElementById('print-date');
               if (dateEl) {
                 dateEl.textContent = 'Generated: ' + new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString();
+              }
+              
+              // Log PDF download action
+              try {
+                if (typeof window.logActivity === 'function') {
+                  await window.logActivity('Download PDF Report', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
+                }
+              } catch (e) {
+                console.error('Failed to log PDF download activity:', e);
               }
               
               // For PDF download, we'll use the browser's print-to-PDF feature
@@ -640,6 +658,10 @@
         <!-- ADD BEARINGS Button - Bottom Right -->
         <button id="add-bearing-btn" class="add-bearing-btn" aria-label="Add land holding" title="Add land holding">
           <span class="add-bearing-icon">+</span>
+        </button>
+        <!-- Map layer toggle button (below add-bearing) -->
+        <button id="map-layer-toggle-btn" class="add-bearing-btn" aria-label="Toggle map layer" title="Toggle map layer" style="bottom: 100px; right: 32px; background:#ffffff; color:#111; box-shadow: 0 4px 16px rgba(0,0,0,0.2); width:56px; height:56px; font-size:14px; font-weight:800; padding:10px;">
+          <img alt="Toggle map" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='%23111' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='1 6 9 3 15 6 23 3 23 18 15 21 9 18 1 21 1 6'/%3E%3Cline x1='9' y1='3' x2='9' y2='18'/%3E%3Cline x1='15' y1='6' x2='15' y2='21'/%3E%3C/svg%3E" style="width:100%; height:100%; object-fit:contain;" />
         </button>
         <!-- REPORTS Button - Bottom Left -->
         <button id="open-reports-btn" class="add-bearing-btn" aria-label="View reports" title="View reports" style="left: 32px; right: auto; background:#10b981; box-shadow: 0 4px 16px rgba(16,185,129,0.3);">
@@ -842,7 +864,11 @@
                           if (item.classList.contains('locked')) { closeList(); return; }
                           var value = item.getAttribute('data-value');
                           label.textContent = item.querySelector('.weapon-name').textContent;
-                          if (selectEl) { selectEl.value = value; }
+                          if (selectEl) { 
+                            selectEl.value = value;
+                            // Trigger change event to update validation
+                            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                          }
                           closeList();
                         });
                         document.addEventListener('click', function(e){ if (!e.target.closest('#rs-dropdown')) closeList(); });
@@ -1114,8 +1140,16 @@
             // Wire logout modal buttons
             const logoutYes = document.getElementById('logout-yes');
             const logoutNo = document.getElementById('logout-no');
-            if (logoutYes) logoutYes.onclick = function(){
+            if (logoutYes) logoutYes.onclick = async function(){
               hideLogoutConfirmation();
+              // Log logout activity
+              try {
+                if (typeof window.logActivity === 'function') {
+                  await window.logActivity('User Logout', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
+                }
+              } catch (e) {
+                console.error('Failed to log logout activity:', e);
+              }
               var splash = document.getElementById('dar-splash');
               if (splash) {
                 splash.style.display = 'flex';
@@ -1155,18 +1189,26 @@
                 zoomControl: false
             });
 
-            // Add Google Satellite tile layer
-            L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            // Base layers
+            const sat = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
                 attribution: 'Tiles © Google — Source: Google Earth',
                 maxZoom: 20
-            }).addTo(map);
-
-            // Add Google Hybrid layer for labels (roads, landmarks, place names)
-            L.tileLayer('https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}', {
+            });
+            const hybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}', {
                 attribution: 'Labels © Google',
                 opacity: 0.8,
                 pane: 'overlayPane'
-            }).addTo(map);
+            });
+            const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            });
+            // Track layers
+            window.osmLayer = osm;
+            window.satLayers = [sat, hybrid];
+            window.currentBase = 'satellite';
+            // Start with Satellite (animated) by default
+            sat.addTo(map);
+            hybrid.addTo(map);
 
             // Set bounds but don't enforce them strictly
             map.setMaxBounds(MANOLO_FORTICH_BOUNDS);
@@ -1183,6 +1225,23 @@
 
             // Store map reference globally
             window.leafletMap = map;
+            // Layer toggle control
+            function setBaseLayer(type){
+              if (!window.leafletMap) return;
+              if (type === 'osm') {
+                window.satLayers.forEach(l=>{ try{ window.leafletMap.removeLayer(l);}catch{}});
+                if (!window.leafletMap.hasLayer(window.osmLayer)) window.osmLayer.addTo(window.leafletMap);
+                window.currentBase = 'osm';
+                // update point colors
+                try { window.updatePointColors && window.updatePointColors(); } catch {}
+              } else {
+                if (window.leafletMap.hasLayer(window.osmLayer)) { try{ window.leafletMap.removeLayer(window.osmLayer);}catch{} }
+                window.satLayers.forEach(l=>{ if (!window.leafletMap.hasLayer(l)) l.addTo(window.leafletMap); });
+                window.currentBase = 'satellite';
+                try { window.updatePointColors && window.updatePointColors(); } catch {}
+              }
+            }
+            window.setBaseLayer = setBaseLayer;
         }
 
         // Add municipality boundary overlay
@@ -1482,6 +1541,12 @@
         document.addEventListener('DOMContentLoaded', function(){
           var btn = document.getElementById('open-reports-btn');
           if (btn) btn.onclick = function(){ navigateTo('home'); };
+          var layerBtn = document.getElementById('map-layer-toggle-btn');
+          if (layerBtn) layerBtn.onclick = function(){
+            var next = (window.currentBase === 'satellite') ? 'osm' : 'satellite';
+            if (typeof window.setBaseLayer === 'function') window.setBaseLayer(next);
+            layerBtn.title = next === 'osm' ? 'Switch to satellite' : 'Switch to OpenStreetMap';
+          };
         });
         </script>
     </main>
@@ -1508,47 +1573,47 @@
 
     <!-- Account Settings Modal -->
     <div id="account-settings-modal" class="ll-modal-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 3001;">
-      <div class="ll-modal-card" style="background:linear-gradient(180deg,#0f172a 0%, #111827 100%); color:#e5e7eb; padding:0; border-radius:16px; width: min(720px, 96vw); box-shadow:0 18px 48px rgba(0,0,0,.38); border:1px solid rgba(148,163,184,.18); overflow:hidden;">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid rgba(148,163,184,.18); background:linear-gradient(180deg,#0b1220,#0f172a);">
+      <div class="ll-modal-card" style="background:#ffffff; color:#111827; padding:0; border-radius:16px; width: min(720px, 96vw); box-shadow:0 18px 48px rgba(0,0,0,.18); border:1px solid #e5e7eb; overflow:hidden;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid #e5e7eb; background:linear-gradient(135deg,#ff7a18,#ff3f00);">
           <div style="display:flex; align-items:center; gap:12px;">
-            <div id="acc-avatar-initials" style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg,#22c55e,#16a34a); display:flex; align-items:center; justify-content:center; font-weight:800; color:#0b1220;">AI</div>
+            <div id="acc-avatar-initials" style="width:40px; height:40px; border-radius:10px; background:#ffffff; display:flex; align-items:center; justify-content:center; font-weight:800; color:#0b1220;">AI</div>
             <div>
-              <div id="acc-fullname-value" style="margin:0; font-size:1.05em; color:#fff; font-weight:800; letter-spacing:.2px;">Account Info</div>
-              <div id="acc-email-sub" style="font-size:.85em; color:#94a3b8;">View your profile details and manage your password</div>
+              <div id="acc-fullname-value" style="margin:0; font-size:1.05em; color:#ffffff; font-weight:800; letter-spacing:.2px;">Account Info</div>
+              <div id="acc-email-sub" style="font-size:.85em; color:#ffe6d7;">View your profile details and manage your password</div>
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <button id="account-change-password-toggle" aria-label="Change password" title="Change password" style="background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#0b1220;font-size:.9em;cursor:pointer; padding:8px 12px; border-radius:10px; font-weight:800;">Change password</button>
-            <button id="account-settings-close" aria-label="Close" style="background:none;border:1px solid rgba(148,163,184,.25);cursor:pointer;color:#cbd5e1;font-size:1.05em; padding:8px 12px; border-radius:10px;">×</button>
+            <button id="account-settings-close" aria-label="Close" style="background:#ffffff;border:1px solid #e5e7eb;cursor:pointer;color:#111827;font-size:1.05em; padding:8px 12px; border-radius:10px;">×</button>
           </div>
         </div>
-        <div style="padding:18px; display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
-          <div id="account-details-section" style="grid-column: 1 / -1; display:grid; grid-template-columns:180px 1fr; row-gap:12px; column-gap:14px; background:rgba(15,23,42,.5); border:1px solid rgba(148,163,184,.14); border-radius:12px; padding:16px; min-height:280px;">
-            <div style="color:#94a3b8;">Username</div><div id="acc-username-value" style="font-weight:700; color:#fff;"></div>
-            <div style="color:#94a3b8;">First Name</div><div id="acc-firstname-value" style="color:#e5e7eb;"></div>
-            <div style="color:#94a3b8;">Last Name</div><div id="acc-lastname-value" style="color:#e5e7eb;"></div>
-            <div style="color:#94a3b8;">Email</div><div id="acc-email-value" style="color:#e5e7eb;"></div>
+        <div style="padding:18px; display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start; background:#ffffff; color:#111827;">
+          <div id="account-details-section" style="grid-column: 1 / -1; display:grid; grid-template-columns:180px 1fr; row-gap:12px; column-gap:14px; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; min-height:280px;">
+            <div style="color:#6b7280;">Username</div><div id="acc-username-value" style="font-weight:700; color:#111827;"></div>
+            <div style="color:#6b7280;">First Name</div><div id="acc-firstname-value" style="color:#111827;"></div>
+            <div style="color:#6b7280;">Last Name</div><div id="acc-lastname-value" style="color:#111827;"></div>
+            <div style="color:#6b7280;">Email</div><div id="acc-email-value" style="color:#111827;"></div>
           </div>
-          <div id="password-change-section" style="grid-column: 1 / -1; display:none; background:rgba(15,23,42,.5); border:1px solid rgba(148,163,184,.14); border-radius:12px; padding:16px; min-height:280px;">
-            <h4 style="margin:0 0 12px 0; font-size:1rem; color:#fff; font-weight:700;">Change Password</h4>
+          <div id="password-change-section" style="grid-column: 1 / -1; display:none; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; min-height:280px;">
+            <h4 style="margin:0 0 12px 0; font-size:1rem; color:#111827; font-weight:700;">Change Password</h4>
             <div style="display:grid; grid-template-columns:180px 1fr; row-gap:12px; column-gap:14px; align-items:center;">
-              <div style="color:#94a3b8;">Current password</div>
-              <input id="acc-currpwd" type="password" placeholder="Current password" style="padding:12px 12px; border:1px solid rgba(148,163,184,.22); border-radius:10px; background:#0b1220; color:#e5e7eb;" />
-              <div style="color:#94a3b8;">New password</div>
-              <input id="acc-newpwd" type="password" placeholder="New password" autocomplete="new-password" style="padding:12px 12px; border:1px solid rgba(148,163,184,.22); border-radius:10px; background:#0b1220; color:#e5e7eb;" />
-              <div style="color:#94a3b8;">Confirm new password</div>
-              <input id="acc-newpwd2" type="password" placeholder="Confirm new password" autocomplete="new-password" style="padding:12px 12px; border:1px solid rgba(148,163,184,.22); border-radius:10px; background:#0b1220; color:#e5e7eb;" />
+              <div style="color:#6b7280;">Current password</div>
+              <input id="acc-currpwd" type="password" placeholder="Current password" style="padding:12px 12px; border:1px solid #d1d5db; border-radius:10px; background:#ffffff; color:#111827;" />
+              <div style="color:#6b7280;">New password</div>
+              <input id="acc-newpwd" type="password" placeholder="New password" autocomplete="new-password" style="padding:12px 12px; border:1px solid #d1d5db; border-radius:10px; background:#ffffff; color:#111827;" />
+              <div style="color:#6b7280;">Confirm new password</div>
+              <input id="acc-newpwd2" type="password" placeholder="Confirm new password" autocomplete="new-password" style="padding:12px 12px; border:1px solid #d1d5db; border-radius:10px; background:#ffffff; color:#111827;" />
             </div>
-            <div id="pw-hint" style="margin-top:6px; color:#94a3b8; font-size:.85em;">Use at least 8 characters. New passwords must match.</div>
+            <div id="pw-hint" style="margin-top:6px; color:#6b7280; font-size:.85em;">Use at least 8 characters. New passwords must match.</div>
             <div id="pw-error" style="margin-top:6px; color:#fca5a5; font-size:.9em; display:none;">New passwords do not match.</div>
             <div id="pw-success" style="margin-top:6px; color:#86efac; font-size:.9em; display:none;">Password updated successfully.</div>
             <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;">
-              <button id="pw-cancel" style="background:#0b1220; color:#e5e7eb; border:1px solid rgba(148,163,184,.25); padding:10px 14px; border-radius:10px; font-weight:600;">Back</button>
+              <button id="pw-cancel" style="background:#ffffff; color:#111827; border:1px solid #e5e7eb; padding:10px 14px; border-radius:10px; font-weight:600;">Back</button>
               <button id="pw-save" disabled style="opacity:.6; cursor:not-allowed; background:linear-gradient(135deg,#22c55e,#16a34a); color:#0b1220; border:none; padding:10px 16px; border-radius:10px; font-weight:800;">Update Password</button>
             </div>
           </div>
           <div style="grid-column: 1 / -1; display:flex; justify-content:center; padding:4px 0 0 0;">
-            <button id="account-settings-cancel" style="background:#0b1220; color:#e5e7eb; border:1px solid rgba(148,163,184,.25); padding:10px 18px; border-radius:10px; font-weight:700; min-width:120px;">Close</button>
+            <button id="account-settings-cancel" style="background:#ffffff; color:#111827; border:1px solid #e5e7eb; padding:10px 18px; border-radius:10px; font-weight:700; min-width:120px;">Close</button>
           </div>
         </div>
       </div>
