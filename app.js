@@ -4018,6 +4018,37 @@ async function showOwnerProfilePopup(area, coords, map, latlng) {
 
   const fieldOrNA = (v) => (v === null || v === undefined || v === '' ? 'N/A' : v);
 
+  // Build EXIF gallery (above profile card)
+  let exifHtml = '';
+  try {
+    const urls = [];
+    if (area && area.land_image_url && typeof area.land_image_url === 'string' && area.land_image_url.trim()) {
+      urls.push(area.land_image_url.trim());
+    }
+    if (area && area.exif_data) {
+      const exifRaw = area.exif_data;
+      if (Array.isArray(exifRaw)) {
+        exifRaw.forEach(function(item){
+          if (typeof item === 'string' && item.trim()) {
+            urls.push(item.trim());
+          } else if (typeof item === 'object' && item) {
+            const url = item.url || item.data_url || item.href || item.path || item.src || item.image_url;
+            if (url && typeof url === 'string' && url.trim()) urls.push(url.trim());
+          }
+        });
+      }
+    }
+    if (urls.length > 0) {
+      exifHtml = `
+        <div class='exif-gallery' style="min-width:260px;max-width:360px;margin-bottom:10px;background:#fff;border:1px solid #ececec;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.12);padding:8px;">
+          <div style="font-weight:700;color:#111;font-size:.95em;margin:0 4px 6px 4px;">Photos</div>
+          <div style="display:flex; gap:8px; overflow-x:auto; padding:2px 4px; scrollbar-width: thin;">
+            ${urls.map((u, index) => `<img src="${u}" alt="Land Area Photo" style="flex:0 0 auto;width:88px;height:66px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;cursor:pointer;transition:transform 0.2s ease;" onerror="this.style.display='none'" onclick="window.openImageModalFromPopup('${u}', ${urls.length}, ${index})" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">`).join('')}
+          </div>
+        </div>`;
+    }
+  } catch(e) { /* ignore */ }
+
   let cardHtml = `<div class='owner-profile-card' style='min-width:260px;max-width:360px;padding:14px 14px 12px 14px;border-radius:14px;background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.15);border:1px solid #ececec;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell;'>`;
 
   cardHtml += `<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;'>` +
@@ -4132,7 +4163,7 @@ async function showOwnerProfilePopup(area, coords, map, latlng) {
 
       .setLatLng(popupLatLng)
 
-      .setContent(cardHtml)
+      .setContent(exifHtml + cardHtml)
 
       .openOn(map);
 
@@ -4204,7 +4235,7 @@ function showAssignTaskModal(area) {
 
     const dueDate = (document.getElementById('task-due-date').value || null);
 
-    const priority = document.getElementById('task-priority').value || 'low';
+    const priority = 'normal';
 
     const notes = document.getElementById('task-notes').value || null;
 

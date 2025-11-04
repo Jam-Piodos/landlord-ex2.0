@@ -654,6 +654,30 @@
         <!-- Bearings Input Modal -->
         <div id="bearings-modal" class="bearings-modal">
           <div class="bearings-modal-content">
+            <style>
+              /* Make Survey Land (Add Land) modal use orange header + white body */
+              #bearings-modal .bearings-modal-content,
+              #bearings-modal.bearings-modal .bearings-modal-content { background:#ffffff !important; color:#111827; border:1px solid #e5e7eb; }
+              #bearings-modal .bearings-modal-header { background: linear-gradient(135deg,#ff7a18,#ff3f00); border-bottom:1px solid #e5e7eb; }
+              #bearings-modal .bearings-modal-footer { background:#ffffff; border-top:1px solid #e5e7eb; }
+              #bearings-modal .progress-indicator { background:#f8fafc; border-bottom:1px solid #e2e8f0; }
+              #bearings-modal .step-label { color:#374151; }
+              #bearings-modal .progress-step.active .step-label { color:#111827; }
+              #bearings-modal .step-number { background:#e2e8f0; color:#64748b; border-color:#e2e8f0; }
+              #bearings-modal .progress-step.active .step-number { background:#ffd600; color:#1a1a1a; border-color:#ffd600; box-shadow:0 4px 12px rgba(255,214,0,.3); }
+              #bearings-modal .progress-line { background:#e2e8f0; }
+              #bearings-modal .ll-label { color:#111827; }
+              #bearings-modal input[type="text"],
+              #bearings-modal input[type="number"],
+              #bearings-modal input[type="date"],
+              #bearings-modal select,
+              #bearings-modal textarea { background:#ffffff; color:#111827; border:1px solid #d1d5db; border-radius:10px; }
+              #bearings-modal input:focus,
+              #bearings-modal select:focus,
+              #bearings-modal textarea:focus { outline:2px solid transparent; border-color:#ff7a18; box-shadow:0 0 0 3px rgba(255,122,24,.25); }
+              #bearings-modal .btn-primary { background:linear-gradient(135deg,#22c55e,#16a34a); color:#0b1220; border:none; }
+              #bearings-modal .btn-secondary { background:#ffffff; color:#111827; border:1px solid #e5e7eb; }
+            </style>
             <div class="bearings-modal-header">
               <div class="header-content">
                 <h3 id="modal-title">Add Land Holding</h3>
@@ -722,8 +746,29 @@
                         color: #1f2937; /* slate-800 */
                         font-weight: 700;
                       }
+                      /* Game-like dropdown reference styles (for future custom UI) */
+                      .dropdown-container { width: 100%; max-width: 400px; position: relative; }
+                      .dropdown-header { background: #ffffff; padding: 1.2rem 1.5rem; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border: 2px solid #e5e7eb; transition: all 0.2s ease; }
+                      .dropdown-header:hover { border-color: #d1d5db; }
+                      .dropdown-header.active { border-color: #00ff88; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+                      .selected-weapon { color: #111827; font-size: 1rem; letter-spacing: .5px; }
+                      .arrow { width: 12px; height: 12px; border-right: 2px solid #111; border-bottom: 2px solid #111; transform: rotate(45deg); transition: transform .2s ease; }
+                      .arrow.up { transform: rotate(-135deg); }
+                      .dropdown-list { position: absolute; top: 100%; left: 0; right: 0; background: #ffffff; border: 2px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; list-style: none; max-height: 0; overflow: hidden; transition: max-height .3s ease; z-index: 10; }
+                      .dropdown-list.open { max-height: 400px; overflow-y: auto; }
+                      .weapon-item { display: flex; align-items: center; justify-content: space-between; padding: 1.2rem 1.5rem; cursor: pointer; transition: all .2s ease; border-bottom: 1px solid #e5e7eb; }
+                      .weapon-item:last-child { border-bottom: none; }
+                      .weapon-item:hover { background: #f3f4f6; transform: translateX(5px); }
+                      .weapon-item.locked { opacity: .4; cursor: not-allowed; }
+                      .weapon-item.locked:hover { background: transparent; transform: none; }
+                      .weapon-item.selected-item { background: #ecfdf5; }
+                      .weapon-name { font-size: 1rem; color: #111827; font-weight: 500; letter-spacing: .5px; }
+                      .weapon-item.locked .weapon-name { color: #6b7280; }
+                      .lock-icon { width: 18px; height: 18px; }
+                      .lock-icon rect { fill: #000; }
+                      .lock-icon path { stroke: #000; stroke-width: 2; fill: none; }
                     </style>
-                    <select id="reference-system-select" class="ll-input" style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #d4d4d4; font-size: 1.05em;" required>
+                    <select id="reference-system-select" class="ll-input" style="width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #d4d4d4; font-size: 1.05em; display:none;" required>
                       <option value="">Select a reference system</option>
                       <option value="gss549" 
                               data-cn="30.720" data-ce="30.595"
@@ -762,6 +807,49 @@
                         BLLM 1, CAD 681 — (locked formula) 🔒
                       </option>
                     </select>
+                    <!-- Custom dropdown UI using game-like style -->
+                    <div id="rs-dropdown" class="dropdown-container" role="listbox" aria-label="Reference systems">
+                      <div id="rs-dropdown-header" class="dropdown-header" aria-haspopup="listbox" aria-expanded="false">
+                        <div class="selected-weapon" id="rs-selected-label">BLLM 1, GSS 549</div>
+                        <div id="rs-arrow" class="arrow"></div>
+                      </div>
+                      <ul id="rs-dropdown-list" class="dropdown-list" tabindex="-1">
+                        <li class="weapon-item" data-value="gss549"><span class="weapon-name">BLLM 1, GSS 549</span></li>
+                        <li class="weapon-item locked" data-value="cad867"><span class="weapon-name">BLLM 1, CAD 867 — locked formula</span><svg class="lock-icon" viewBox="0 0 24 24"><rect x="6" y="10" width="12" height="10" rx="1"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></li>
+                        <li class="weapon-item locked" data-value="pls854"><span class="weapon-name">BLLM 1, PLS 854 — locked formula</span><svg class="lock-icon" viewBox="0 0 24 24"><rect x="6" y="10" width="12" height="10" rx="1"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></li>
+                        <li class="weapon-item locked" data-value="prs92"><span class="weapon-name">BLLM 1, PRS 92 — locked formula</span><svg class="lock-icon" viewBox="0 0 24 24"><rect x="6" y="10" width="12" height="10" rx="1"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></li>
+                        <li class="weapon-item locked" data-value="cad672"><span class="weapon-name">BLLM 1, CAD 672 — locked formula</span><svg class="lock-icon" viewBox="0 0 24 24"><rect x="6" y="10" width="12" height="10" rx="1"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></li>
+                        <li class="weapon-item locked" data-value="cad681"><span class="weapon-name">BLLM 1, CAD 681 — locked formula</span><svg class="lock-icon" viewBox="0 0 24 24"><rect x="6" y="10" width="12" height="10" rx="1"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></li>
+                      </ul>
+                    </div>
+                    <script>
+                      (function(){
+                        var selectEl = document.getElementById('reference-system-select');
+                        var head = document.getElementById('rs-dropdown-header');
+                        var list = document.getElementById('rs-dropdown-list');
+                        var arrow = document.getElementById('rs-arrow');
+                        var label = document.getElementById('rs-selected-label');
+                        function closeList(){ head.classList.remove('active'); list.classList.remove('open'); head.setAttribute('aria-expanded','false'); arrow.classList.remove('up'); }
+                        head.addEventListener('click', function(){
+                          var open = list.classList.toggle('open');
+                          head.classList.toggle('active', open);
+                          head.setAttribute('aria-expanded', String(open));
+                          arrow.classList.toggle('up', open);
+                        });
+                        list.addEventListener('click', function(e){
+                          var item = e.target.closest('.weapon-item');
+                          if (!item) return;
+                          if (item.classList.contains('locked')) { closeList(); return; }
+                          var value = item.getAttribute('data-value');
+                          label.textContent = item.querySelector('.weapon-name').textContent;
+                          if (selectEl) { selectEl.value = value; }
+                          closeList();
+                        });
+                        document.addEventListener('click', function(e){ if (!e.target.closest('#rs-dropdown')) closeList(); });
+                        // Initialize default selection to gss549
+                        if (selectEl && !selectEl.value) selectEl.value = 'gss549';
+                      })();
+                    </script>
                     <div class="input-help">Locked entries are view-only.</div>
                   </div>
                 </div>
@@ -903,10 +991,10 @@
           left: 20px;
           width: 320px;
           max-height: calc(100vh - 100px);
-          background: white;
+          background: #ffffff;
           border-radius: var(--radius-xl);
-          box-shadow: var(--shadow-xl);
-          border: 1px solid var(--neutral-200);
+          box-shadow: 0 18px 48px rgba(0,0,0,.18);
+          border: 1px solid #e5e7eb;
           z-index: 1000;
           overflow: hidden;
           transition: all 0.3s ease;
@@ -914,7 +1002,7 @@
         ">
           
           
-          <div class="landarea-panel-content" style="padding: 1rem;">
+          <div class="landarea-panel-content" style="padding: 1rem; color:#111827;">
             <div class="landarea-panel-header" style="
               margin-bottom: 0.5rem;
               padding-left: 3rem;
@@ -929,12 +1017,12 @@
                   margin: 0;
                   font-size: 1.125rem;
                   font-weight: 700;
-                  color: var(--neutral-800);
+                  color: #111827;
                 ">Land Holdings</h3>
                 <p id="landarea-count" style="
                   margin: 0.25rem 0 0 0;
                   font-size: 0.875rem;
-                  color: var(--neutral-500);
+                  color: #6b7280;
                 ">Loading...</p>
               </div>
               
@@ -1488,38 +1576,42 @@
  
 
 <!-- Assign Task Modal -->
-<div id="assign-task-modal" class="ll-modal-overlay" style="display:none; position: fixed; inset: 0; background: #0006; align-items: center; justify-content: center; z-index: 1000;">
-  <div class="ll-modal-card" style="background:#fff; padding:0; border-radius:12px; width: min(560px, 92vw); box-shadow:0 12px 32px rgba(0,0,0,.22); border:1px solid #ececec; overflow:hidden;">
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #f1f5f9; background:#ffffff;">
-      <h3 class="ll-modal-title" style="margin:0; font-size:1.06em; color:#111;">Assign Survey Task</h3>
-      <button id="assign-task-close" aria-label="Close" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:1.2em;">×</button>
+<div id="assign-task-modal" class="ll-modal-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; z-index: 3001;">
+  <div class="ll-modal-card" style="background:#ffffff; color:#111827; padding:0; border-radius:16px; width: min(720px, 96vw); max-height: 90vh; box-shadow:0 18px 48px rgba(0,0,0,.18); border:1px solid #e5e7eb; overflow:hidden; display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid #e5e7eb; background:linear-gradient(135deg,#ff7a18,#ff3f00);">
+      <h3 class="ll-modal-title" style="margin:0; font-size:1.06em; color:#fff;">Assign Survey Task</h3>
+      <button id="assign-task-close" aria-label="Close" style="background:#ffffff;border:1px solid #e5e7eb;cursor:pointer;color:#111827;font-size:1.05em; padding:8px 12px; border-radius:10px;">×</button>
     </div>
-    <div class="ll-form-grid" style="padding:16px; display:grid; gap:12px 14px; align-items:start;">
+    <div class="ll-form-grid" style="padding:16px; display:grid; gap:12px 14px; align-items:start; overflow:auto; max-height: calc(90vh - 140px);">
       <div class="ll-field"><label class="ll-label">Land Area ID</label><input class="ll-input" id="task-land-id" type="text" disabled /></div>
       <div class="ll-field"><label class="ll-label">Technician</label><select class="ll-input" id="task-technician"></select></div>
       <div class="ll-field"><label class="ll-label">Due Date</label><input class="ll-input" id="task-due-date" type="date" /></div>
-      <div class="ll-field"><label class="ll-label">Priority</label><select class="ll-input" id="task-priority"><option>low</option><option>medium</option><option>high</option></select></div>
       <div class="ll-field" style="grid-column: 1 / -1;"><label class="ll-label">Notes</label><textarea class="ll-input" id="task-notes" rows="3" style="resize:vertical;"></textarea></div>
     </div>
-    <div class="ll-actions" style="display:flex; gap:10px; justify-content:flex-end; padding:12px 16px; border-top:1px solid #f1f5f9; background:#fafafa;">
-      <button class="ll-btn" id="assign-task-cancel" style="background:#fff; color:#111; border:1px solid #ddd; padding:8px 14px; border-radius:8px; font-weight:600;">Cancel</button>
-      <button class="ll-btn-primary" id="assign-task-save" style="background:#10b981; color:#ffffff; border:none; padding:8px 16px; border-radius:8px; font-weight:700;">Assign</button>
+    <div class="ll-actions" style="display:flex; gap:10px; justify-content:flex-end; padding:12px 16px; border-top:1px solid #e5e7eb; background:#ffffff;">
+      <button class="ll-btn" id="assign-task-cancel" style="background:#ffffff; color:#111827; border:1px solid #e5e7eb; padding:10px 14px; border-radius:10px; font-weight:600;">Cancel</button>
+      <button class="ll-btn-primary" id="assign-task-save" style="background:linear-gradient(135deg,#22c55e,#16a34a); color:#0b1220; border:none; padding:10px 16px; border-radius:10px; font-weight:800;">Assign</button>
     </div>
   </div>
   
 </div>
 
 <!-- Enhanced Edit Land Info Modal -->
-<div id="edit-land-modal" class="ll-modal-overlay">
-  <div class="ll-modal-card">
-    <div>
-      <h3 class="ll-modal-title">Edit Land Information</h3>
-      <button id="edit-land-close" class="close-btn" aria-label="Close modal">&times;</button>
+<div id="edit-land-modal" class="ll-modal-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); align-items: center; justify-content: center; z-index: 3001;">
+  <div class="ll-modal-card" style="background:#ffffff; color:#111827; padding:0; border-radius:16px; width: min(840px, 96vw); max-height: 90vh; box-shadow:0 18px 48px rgba(0,0,0,.18); border:1px solid #e5e7eb; overflow:hidden; display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid #e5e7eb; background:linear-gradient(135deg,#ff7a18,#ff3f00);">
+      <h3 class="ll-modal-title" style="margin:0; font-size:1.06em; color:#fff;">Edit Land Information</h3>
+      <button id="edit-land-close" class="close-btn" aria-label="Close modal" style="background:#ffffff;border:1px solid #e5e7eb;cursor:pointer;color:#111827;font-size:1.05em; padding:8px 12px; border-radius:10px;">&times;</button>
     </div>
     
     <input id="edit-land-id" type="hidden" />
-    
-    <div class="ll-form-grid">
+    <style>
+      /* Ensure content fits and matches white theme */
+      #edit-land-modal .ll-label { color: #111827; }
+      #edit-land-modal .ll-input { background:#fff; color:#111827; border:1px solid #d1d5db; }
+      #edit-land-modal .ll-input:focus { outline: 2px solid transparent; border-color: #ff7a18; box-shadow: 0 0 0 3px rgba(255,122,24,.25); }
+    </style>
+    <div class="ll-form-grid" style="padding:16px; display:grid; gap:12px 14px; align-items:start; overflow:auto; max-height: calc(90vh - 140px);">
       <div class="ll-field">
         <label class="ll-label">LHID</label>
         <input class="ll-input" id="edit-lhid" type="text" placeholder="Enter LHID" />
@@ -1594,9 +1686,9 @@
       </div>
     </div>
     
-    <div class="ll-actions">
-      <button class="ll-btn" id="edit-land-cancel">Cancel</button>
-      <button class="ll-btn-primary" id="edit-land-save">Save Changes</button>
+    <div class="ll-actions" style="display:flex; gap:10px; justify-content:flex-end; padding:12px 16px; border-top:1px solid #e5e7eb; background:#ffffff;">
+      <button class="ll-btn" id="edit-land-cancel" style="background:#ffffff; color:#111827; border:1px solid #e5e7eb; padding:10px 14px; border-radius:10px; font-weight:600;">Cancel</button>
+      <button class="ll-btn-primary" id="edit-land-save" style="background:linear-gradient(135deg,#22c55e,#16a34a); color:#0b1220; border:none; padding:10px 16px; border-radius:10px; font-weight:800;">Save Changes</button>
     </div>
   </div>
 </div>
@@ -1632,6 +1724,93 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeof navigateTo === 'function') navigateTo('map');
   }
 });
+</script>
+
+<!-- Image Modal -->
+<div id="image-modal" class="image-modal-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(4px); z-index: 5000; align-items: center; justify-content: center;">
+  <div class="image-modal-content" style="position: relative; max-width: 90vw; max-height: 90vh; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+    <div class="image-modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #f8f9fa; border-bottom: 1px solid #e9ecef;">
+      <div id="image-counter" style="font-weight: 600; color: #495057; font-size: 14px;">1 / 1</div>
+      <button id="close-image-modal" onclick="window.closeImageModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #6c757d; padding: 4px; border-radius: 4px; transition: background 0.2s ease;" onmouseover="this.style.background='#e9ecef'" onmouseout="this.style.background='none'">×</button>
+    </div>
+    <div class="image-modal-body" style="position: relative; display: flex; align-items: center; justify-content: center; min-height: 300px; background: #000;">
+      <img id="modal-image" src="" alt="Full size image" style="max-width: 100%; max-height: 70vh; object-fit: contain; display: block;">
+      <button id="prev-image" onclick="window.navigateImage(-1)" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.7); color: white; border: none; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; font-size: 18px; display: none; align-items: center; justify-content: center; transition: background 0.2s ease;" onmouseover="this.style.background='rgba(0,0,0,0.9)'" onmouseout="this.style.background='rgba(0,0,0,0.7)'">‹</button>
+      <button id="next-image" onclick="window.navigateImage(1)" style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.7); color: white; border: none; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; font-size: 18px; display: none; align-items: center; justify-content: center; transition: background 0.2s ease;" onmouseover="this.style.background='rgba(0,0,0,0.9)'" onmouseout="this.style.background='rgba(0,0,0,0.7)'">›</button>
+    </div>
+  </div>
+  
+</div>
+
+<script>
+// Image modal keyboard navigation
+document.addEventListener('keydown', function(e) {
+  var imageModal = document.getElementById('image-modal');
+  if (imageModal && imageModal.style.display === 'flex') {
+    if (e.key === 'Escape') {
+      window.closeImageModal();
+    } else if (e.key === 'ArrowLeft') {
+      window.navigateImage(-1);
+    } else if (e.key === 'ArrowRight') {
+      window.navigateImage(1);
+    }
+  }
+});
+
+// Close image modal on overlay click
+document.addEventListener('click', function(e) {
+  var imageModal = document.getElementById('image-modal');
+  if (imageModal && imageModal.style.display === 'flex' && e.target === imageModal) {
+    window.closeImageModal();
+  }
+});
+
+// Image modal functionality
+window.openImageModal = function(imageUrl, totalImages, currentIndex) {
+  var modal = document.getElementById('image-modal');
+  if (!modal) return;
+  var img = modal.querySelector('#modal-image');
+  var prevBtn = modal.querySelector('#prev-image');
+  var nextBtn = modal.querySelector('#next-image');
+  var counter = modal.querySelector('#image-counter');
+  if (img) img.src = imageUrl;
+  if (counter) counter.textContent = String((currentIndex + 1)) + ' / ' + String(totalImages);
+  if (prevBtn) prevBtn.style.display = totalImages > 1 ? 'flex' : 'none';
+  if (nextBtn) nextBtn.style.display = totalImages > 1 ? 'flex' : 'none';
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  window.currentImageIndex = currentIndex;
+  window.currentImageUrls = window.currentImageUrls || [];
+};
+
+window.closeImageModal = function() {
+  var modal = document.getElementById('image-modal');
+  if (modal) {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+};
+
+window.navigateImage = function(direction) {
+  if (!window.currentImageUrls || window.currentImageUrls.length === 0) return;
+  var total = window.currentImageUrls.length;
+  var newIndex = window.currentImageIndex + direction;
+  if (newIndex < 0) newIndex = total - 1;
+  if (newIndex >= total) newIndex = 0;
+  window.currentImageIndex = newIndex;
+  window.openImageModal(window.currentImageUrls[newIndex], total, newIndex);
+};
+
+// Safe image modal opener for popup thumbnails
+window.openImageModalFromPopup = function(imageUrl, totalImages, currentIndex) {
+  if (!window.currentImageUrls) { window.currentImageUrls = []; }
+  var popupElement = document.querySelector('.leaflet-popup-content');
+  if (popupElement) {
+    var images = popupElement.querySelectorAll('.exif-gallery img');
+    window.currentImageUrls = Array.prototype.slice.call(images).map(function(img){ return img.src; });
+  }
+  window.openImageModal(imageUrl, totalImages, currentIndex);
+};
 </script>
 
 </html>
