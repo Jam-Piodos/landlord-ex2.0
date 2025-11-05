@@ -70,8 +70,15 @@ function hasRole(requiredRoles) {
 }
 
 function hardRedirectToLogin() {
-  // Replace the current history entry so Back won’t re-enter the protected page
-  try { history.replaceState(null, '', 'index.html'); } catch {}
+  // Clear session state
+  try { localStorage.removeItem('ll_current_user'); } catch {}
+  try { sessionStorage.removeItem('ll_session'); } catch {}
+  
+  // Replace the current history entry so Back won't re-enter the protected page
+  // Mark as login page so authenticated pages can detect it
+  try { 
+    history.replaceState({ authenticated: false, loginPage: true }, '', 'index.html'); 
+  } catch {}
   window.location.replace('index.html');
 }
 
@@ -109,6 +116,14 @@ function enforceAuthGuard() {
     // Role-based checks
     if (isHome && !hasRole(['office'])) { hardRedirectToLogin(); return; }
     if (isAdmin && !hasRole(['admin','office'])) { hardRedirectToLogin(); return; }
+    
+    // Check if current history state is from login page and fix it
+    try {
+      if (history.state && (history.state.loginPage === true || history.state.authenticated === false)) {
+        // Replace login page state with authenticated state
+        history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
+      }
+    } catch {}
 
     // Online validation against Supabase to prevent localStorage spoofing
     (async () => {
@@ -127,37 +142,81 @@ function enforceAuthGuard() {
       }
     })();
 
-    // Prevent back navigation - replace current history entry
+    // Clean up history stack to remove login page entries
+    // This ensures back button won't go to login page
     try {
-      history.replaceState({ authenticated: true, timestamp: Date.now() }, '', window.location.href);
-      // Push a dummy state to prevent back navigation
-      history.pushState({ authenticated: true, timestamp: Date.now() }, '', window.location.href);
+      // Replace current entry with authenticated state
+      // This overwrites any previous state (like login page)
+      history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
+      
+      // Push a new authenticated state to create a barrier
+      // This prevents back button from accessing previous states (like login page)
+      history.pushState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
     } catch {}
 
-    // Handle browser back button
-    window.addEventListener('popstate', function(e) {
-      // Always validate session on back navigation
+    // Handle browser back/forward buttons
+    let popstateHandler = function(e) {
+      // Always validate session on navigation
       if (!isLoggedIn()) {
         hardRedirectToLogin();
         return;
       }
-      // If navigating back, validate and redirect if invalid
+      
+      // Check if we're trying to navigate to login page
+      const isLoginPage = window.location.pathname.includes('index.html') || 
+                         (e.state && e.state.loginPage === true) ||
+                         (e.state && e.state.authenticated === false);
+      
+      if (isLoginPage) {
+        // Prevent navigation to login page - immediately redirect back to authenticated page
+        const targetPage = isHome ? 'home.html#map' : 'admin.html#profile';
+        history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', targetPage);
+        window.location.replace(targetPage);
+        return;
+      }
+      
+      // Validate session for any navigation
       validateSession().then(isValid => {
         if (!isValid) {
           hardRedirectToLogin();
           return;
         }
-        // If valid but trying to go back, push forward
-        try {
-          history.pushState({ authenticated: true, timestamp: Date.now() }, '', window.location.href);
-          // Prevent going back to login page
-          if (window.location.pathname.includes('index.html')) {
-            history.replaceState(null, '', window.location.href);
-            window.location.replace(isHome ? 'home.html#map' : 'admin.html#profile');
+        
+        // If we're on an authenticated page but state says we're not authenticated, fix it
+        if (e.state && e.state.authenticated !== true) {
+          const targetPage = isHome ? 'home.html#map' : 'admin.html#profile';
+          history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', targetPage);
+          if (window.location.pathname !== targetPage.split('#')[0]) {
+            window.location.replace(targetPage);
           }
+          return;
+        }
+        
+        // If navigation is valid but we're somehow on login page, redirect
+        if (window.location.pathname.includes('index.html')) {
+          const targetPage = isHome ? 'home.html#map' : 'admin.html#profile';
+          history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', targetPage);
+          window.location.replace(targetPage);
+          return;
+        }
+        
+        // Ensure current state is marked as authenticated
+        try {
+          if (!e.state || e.state.authenticated !== true) {
+            history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
+          }
+          // Push forward to prevent further back navigation
+          history.pushState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
         } catch {}
       });
-    });
+    };
+    
+    // Add popstate listener (only once)
+    if (!window._llPopstateHandlerAdded) {
+      window.addEventListener('popstate', popstateHandler);
+      window._llPopstateHandlerAdded = true;
+      window._llPopstateHandler = popstateHandler;
+    }
 
     // Prevent keyboard navigation shortcuts
     window.addEventListener('keydown', function(e) {
@@ -232,6 +291,283 @@ function enforceAuthGuard() {
   }
 }
 
+// ============ Navigation Blocking System ============
+// Global flag to track logout-in-progress state
+window.llLogoutInProgress = false;
+
+// Global flag to track if navigation should be blocked (when logged in)
+window.llNavigationBlocked = false;
+
+// Function to block all navigation and interactions (except logout)
+function blockNavigation() {
+  window.llNavigationBlocked = true;
+  
+  // Helper to check if element is logout-related
+  function isLogoutElement(el) {
+    if (!el) return false;
+    const id = (el.id || '').toLowerCase();
+    const className = (el.className || '').toLowerCase();
+    const text = (el.textContent || '').toLowerCase();
+    return id.includes('logout') || 
+           className.includes('logout') || 
+           text.includes('log out') ||
+           el.closest('#logout-confirmation') !== null ||
+           el.closest('#admin-settings-menu') !== null ||
+           el.closest('[id*="settings"]') !== null;
+  }
+  
+  // Disable navigation links that go to different pages (not internal sections)
+  // Allow links that use hash navigation or navigateTo for internal sections
+  document.querySelectorAll('a[href], a[onclick], a[data-target]').forEach(link => {
+    if (!isLogoutElement(link)) {
+      const href = link.getAttribute('href') || '';
+      const onclick = link.getAttribute('onclick') || '';
+      const dataTarget = link.getAttribute('data-target') || '';
+      
+      // Check if this link navigates to a different page (not internal section)
+      const isHashLink = href.startsWith('#');
+      const isInternalSection = ['home', 'map', 'reports', 'profile', 'workspace'].includes(
+        href.replace('#', '') || dataTarget || ''
+      );
+      const navigatesToDifferentPage = (
+        (href && !isHashLink && !href.startsWith('#')) ||
+        onclick.includes('window.location') ||
+        onclick.includes('.href') ||
+        href.includes('admin.html') ||
+        href.includes('home.html') ||
+        href.includes('index.html')
+      );
+      
+      // Only block if it navigates to a different page, not internal hash sections
+      if (navigatesToDifferentPage && !isHashLink && !isInternalSection) {
+        link.style.pointerEvents = 'none';
+        link.style.opacity = '0.5';
+        link.style.cursor = 'not-allowed';
+        link.setAttribute('data-ll-blocked', 'true');
+        
+        // Prevent click events
+        const originalOnClick = link.onclick;
+        link.onclick = function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        };
+        link.setAttribute('data-ll-original-onclick', originalOnClick ? originalOnClick.toString() : '');
+      }
+    }
+  });
+  
+  // Disable navigation buttons that navigate to different pages (not internal sections)
+  // But allow buttons that use navigateTo for internal section switching
+  document.querySelectorAll('button[onclick], button[data-target]').forEach(btn => {
+    if (!isLogoutElement(btn)) {
+      const onclick = btn.getAttribute('onclick') || '';
+      const dataTarget = btn.getAttribute('data-target') || '';
+      
+      // Check if this button navigates to a different page (not internal section)
+      const navigatesToDifferentPage = (
+        onclick.includes('window.location') ||
+        onclick.includes('.href') ||
+        onclick.includes('admin.html') ||
+        onclick.includes('home.html') ||
+        onclick.includes('index.html') ||
+        (dataTarget && !['home', 'map', 'reports', 'profile', 'workspace'].includes(dataTarget))
+      );
+      
+      // Only block if it navigates to a different page, not internal sections
+      if (navigatesToDifferentPage) {
+        btn.disabled = true;
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+        btn.setAttribute('data-ll-blocked', 'true');
+      }
+    }
+  });
+  
+  // Override navigateTo function - but allow internal section navigation
+  // navigateTo is for switching sections within the same page, not page navigation
+  // So we should NOT block it - it's legitimate internal navigation
+  // Only block actual page navigation (to different HTML files)
+  if (typeof window.navigateTo === 'function' && !window.navigateTo._blocked) {
+    // Don't block navigateTo - it's for internal section switching
+    // The navigation blocking should only prevent navigation to different pages
+    // Internal section navigation (home, map, reports, etc.) should work normally
+    window.navigateTo._blocked = false; // Mark as processed but not blocked
+  }
+  
+  // Intercept hash changes - but allow internal section navigation
+  // Hash changes for sections like #home, #map, #reports should be allowed
+  if (!window._llHashChangeBlocked) {
+    let lastHash = window.location.hash;
+    const allowedSections = ['home', 'map', 'reports', 'profile', 'workspace'];
+    window.addEventListener('hashchange', function(e) {
+      if (window.llNavigationBlocked && !window.llLogoutInProgress) {
+        const currentHash = window.location.hash.replace('#', '');
+        // Allow hash changes for internal sections
+        if (allowedSections.includes(currentHash)) {
+          lastHash = window.location.hash;
+          return; // Allow this navigation
+        }
+        // Block other hash changes (like navigation attempts)
+        history.replaceState(null, '', window.location.pathname + window.location.search + lastHash);
+        console.warn('Hash navigation blocked: User must log out before navigating.');
+        return false;
+      } else {
+        // Update lastHash when navigation is allowed
+        lastHash = window.location.hash;
+      }
+    }, { capture: true });
+    window._llHashChangeBlocked = true;
+  }
+  
+  // Also prevent anchor tag clicks that would navigate to different pages
+  // But allow hash links for internal section navigation
+  document.addEventListener('click', function(e) {
+    if (window.llNavigationBlocked && !window.llLogoutInProgress) {
+      const target = e.target.closest('a[href]');
+      if (target && !target.closest('#logout-confirmation') && 
+          !target.id.includes('logout') && 
+          !target.closest('#admin-settings-menu')) {
+        const href = target.getAttribute('href') || '';
+        // Allow hash links (internal section navigation)
+        if (!href.startsWith('#') && href !== '' && !href.match(/^#(home|map|reports|profile|workspace)$/)) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.warn('Navigation link click blocked: User must log out before navigating.');
+          return false;
+        }
+      }
+    }
+  }, { capture: true });
+  
+  // Track initial location to detect navigation attempts
+  if (!window._llInitialLocation) {
+    window._llInitialLocation = window.location.href;
+  }
+  
+  // Intercept window.location.href assignments via event listeners
+  // Note: We can't fully override location, but we can prevent navigation links from working
+  // The hashchange and navigateTo overrides should handle most cases
+}
+
+// Function to enable navigation (after logout)
+function enableNavigation() {
+  window.llNavigationBlocked = false;
+  
+  // Re-enable all navigation links
+  document.querySelectorAll('[data-ll-blocked="true"]').forEach(element => {
+    element.style.pointerEvents = '';
+    element.style.opacity = '';
+    element.style.cursor = '';
+    element.removeAttribute('data-ll-blocked');
+    
+    // Restore original onclick if it exists
+    const originalOnClick = element.getAttribute('data-ll-original-onclick');
+    if (originalOnClick && originalOnClick !== 'null') {
+      try {
+        element.onclick = new Function('return ' + originalOnClick)();
+      } catch (e) {
+        // If restoration fails, remove the onclick
+        element.onclick = null;
+      }
+    }
+    element.removeAttribute('data-ll-original-onclick');
+    
+    // Re-enable buttons
+    if (element.tagName === 'BUTTON') {
+      element.disabled = false;
+    }
+  });
+  
+  // Restore original navigateTo function
+  if (window.navigateTo && window.navigateTo._blocked && window.navigateTo._original) {
+    window.navigateTo = window.navigateTo._original;
+    window.navigateTo._blocked = false;
+    delete window.navigateTo._original;
+  }
+  
+  // Clear initial location tracking
+  if (window._llInitialLocation) {
+    delete window._llInitialLocation;
+  }
+  
+  // Clear hash change blocking flag
+  if (window._llHashChangeBlocked) {
+    window._llHashChangeBlocked = false;
+  }
+}
+
+// Store reference to preventNav handler for cleanup
+let preventNavHandler = null;
+
+// Function to block all interactions during logout
+function blockAllInteractions() {
+  window.llLogoutInProgress = true;
+  
+  // Add a blocking overlay
+  let overlay = document.getElementById('ll-logout-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'll-logout-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 999999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.2rem;
+      font-weight: 600;
+    `;
+    overlay.innerHTML = '<div style="text-align: center;"><div style="margin-bottom: 1rem;">Logging out...</div><div style="font-size: 0.9rem; opacity: 0.8;">Please wait</div></div>';
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = 'flex';
+  
+  // Disable all clickable elements
+  document.body.style.pointerEvents = 'none';
+  overlay.style.pointerEvents = 'auto';
+  
+  // Prevent any navigation
+  preventNavHandler = function preventNav(e) {
+    e.preventDefault();
+    e.returnValue = '';
+  };
+  window.addEventListener('beforeunload', preventNavHandler, { capture: true });
+}
+
+// Function to unblock interactions (after logout completes)
+function unblockAllInteractions() {
+  window.llLogoutInProgress = false;
+  
+  // Remove blocking overlay
+  const overlay = document.getElementById('ll-logout-overlay');
+  if (overlay) {
+    overlay.style.display = 'none';
+    setTimeout(() => {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    }, 300);
+  }
+  
+  // Re-enable body interactions
+  document.body.style.pointerEvents = '';
+  
+  // Remove beforeunload handler if it exists
+  if (preventNavHandler) {
+    window.removeEventListener('beforeunload', preventNavHandler, { capture: true });
+    preventNavHandler = null;
+  }
+}
+
 // Run guard immediately - don't wait for DOM
 enforceAuthGuard();
 
@@ -240,20 +576,56 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', enforceAuthGuard, { once: true });
 }
 
+// Block navigation when user is logged in
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    if (isLoggedIn()) {
+      blockNavigation();
+    }
+  });
+} else {
+  if (isLoggedIn()) {
+    blockNavigation();
+  }
+}
+
 // Global logout helper for all pages
 window.llLogout = async function() {
-  // Log logout activity before clearing session (so we can capture user name)
+  // Block all interactions during logout
+  blockAllInteractions();
+  
   try {
-    if (typeof logActivity === 'function') {
-      await logActivity('User Logout', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
+    // Log logout activity before clearing session (so we can capture user name)
+    try {
+      if (typeof logActivity === 'function') {
+        await logActivity('User Logout', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
+      }
+    } catch (e) {
+      console.error('Failed to log logout activity:', e);
     }
+    
+    // Clear session after logging
+    try { localStorage.removeItem('ll_current_user'); } catch {}
+    try { sessionStorage.removeItem('ll_session'); } catch {}
+    
+    // Small delay to ensure cleanup completes
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Unblock interactions before redirect
+    unblockAllInteractions();
+    
+    // Enable navigation for login page
+    enableNavigation();
+    
+    // Redirect to login
+    hardRedirectToLogin();
   } catch (e) {
-    console.error('Failed to log logout activity:', e);
+    console.error('Error during logout:', e);
+    // Even if there's an error, try to redirect
+    unblockAllInteractions();
+    enableNavigation();
+    hardRedirectToLogin();
   }
-  // Clear session after logging
-  try { localStorage.removeItem('ll_current_user'); } catch {}
-  try { sessionStorage.removeItem('ll_session'); } catch {}
-  hardRedirectToLogin();
 };
 
 // Session utilities
@@ -1790,6 +2162,13 @@ document.addEventListener('DOMContentLoaded', function() {
       hideAddTechnicianModal();
 
       fetchAndRenderUsers();
+
+      // Log activity for admin add user
+      try {
+        if (typeof window.logActivity === 'function') {
+          await window.logActivity('Add User', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
+        }
+      } catch (e) { console.warn('Failed to log add user activity', e); }
 
     };
 

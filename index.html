@@ -167,11 +167,22 @@
                   console.error('Error logging login activity:', e);
                 }
                 if (role === 'office') {
+                    // Replace login page history entry before redirecting
+                    // This prevents back button from going to login after redirect
+                    try {
+                        history.replaceState({ authenticated: false, loginPage: true }, '', 'index.html');
+                    } catch {}
                     showDarSplash('home.html#map');
                     return;
                 }
                 if (role === 'admin') {
-                    window.location.href = 'admin.html#profile';
+                    // Replace login page history entry before redirecting
+                    // This prevents back button from going to login after redirect
+                    try {
+                        history.replaceState({ authenticated: false, loginPage: true }, '', 'index.html');
+                    } catch {}
+                    // Use replace instead of href to prevent back navigation
+                    window.location.replace('admin.html#profile');
                     return;
                 }
                 if (role === 'technician') {
@@ -195,9 +206,16 @@
       // Show DAR splash, then navigate
       function showDarSplash(nextUrl) {
         const el = document.getElementById('dar-splash');
-        if (!el) { window.location.href = nextUrl; return; }
+        if (!el) { 
+          // Use replace to prevent back navigation to login
+          window.location.replace(nextUrl); 
+          return; 
+        }
         el.style.display = 'flex';
-        setTimeout(function(){ window.location.href = nextUrl; }, 3000);
+        setTimeout(function(){ 
+          // Use replace to prevent back navigation to login
+          window.location.replace(nextUrl); 
+        }, 3000);
       }
       // Show/hide password (accessible)
       document.getElementById('toggle-password').onclick = function() {

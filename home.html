@@ -1142,19 +1142,20 @@
             const logoutNo = document.getElementById('logout-no');
             if (logoutYes) logoutYes.onclick = async function(){
               hideLogoutConfirmation();
-              // Log logout activity
-              try {
-                if (typeof window.logActivity === 'function') {
-                  await window.logActivity('User Logout', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
-                }
-              } catch (e) {
-                console.error('Failed to log logout activity:', e);
-              }
-              var splash = document.getElementById('dar-splash');
-              if (splash) {
-                splash.style.display = 'flex';
-                setTimeout(function(){ window.location.href = 'index.html'; }, 3000);
+              // Use centralized logout function which handles blocking
+              if (window.llLogout) {
+                window.llLogout();
               } else {
+                // Fallback if llLogout is not available
+                try {
+                  if (typeof window.logActivity === 'function') {
+                    await window.logActivity('User Logout', 'succeeded', new Date().toLocaleTimeString('en-US', { hour12: false }));
+                  }
+                } catch (e) {
+                  console.error('Failed to log logout activity:', e);
+                }
+                try { localStorage.removeItem('ll_current_user'); } catch {}
+                try { sessionStorage.removeItem('ll_session'); } catch {}
                 window.location.href = 'index.html';
               }
             };
