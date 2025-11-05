@@ -2,6 +2,9 @@
 <html lang="en">
 
 <head>
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <script>
       (function(){
         function toLogin(){ try { history.replaceState(null,'','index.html'); } catch(e){} window.location.replace('index.html'); }
@@ -13,10 +16,19 @@
           if (!sess) return toLogin();
           var user = JSON.parse(raw);
           var role = String((user && user.role) || '').toLowerCase();
-          if (user && user.active !== false && role === 'office') return;
+          if (user && user.active !== false && role === 'office') {
+            // Establish an authenticated history barrier ASAP
+            try { history.replaceState({ authenticated:true, page:'home' }, '', 'home.html'); } catch{}
+            try { history.pushState({ authenticated:true, page:'home' }, '', 'home.html'); } catch{}
+            return;
+          }
           return toLogin();
         } catch(e){ return toLogin(); }
       })();
+    </script>
+    <script>
+      // Reload if returned from bfcache to avoid showing stale protected content
+      window.addEventListener('pageshow', function(e){ if (e.persisted) { try { location.reload(); } catch{} } });
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

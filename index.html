@@ -1,6 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <script>
+      // Login page navigation/session guard
+      (function(){
+        function hasActiveSession(){
+          try {
+            var u = localStorage.getItem('ll_current_user');
+            var s = sessionStorage.getItem('ll_session');
+            if (!u || !s) return false;
+            var usr = JSON.parse(u||'null');
+            var ses = JSON.parse(s||'null');
+            return !!(usr && usr.role && ses && ses.user_id && ses.token);
+          } catch { return false; }
+        }
+        function redirectAuthenticated(){
+          try {
+            var u = JSON.parse(localStorage.getItem('ll_current_user')||'null') || {};
+            var role = String(u.role||'').toLowerCase();
+            var target = (role === 'admin') ? 'admin.html#profile' : 'home.html#map';
+            try { history.replaceState({ authenticated:true, page: (role==='admin'?'admin':'home') }, '', target); } catch{}
+            window.location.replace(target);
+          } catch {}
+        }
+        function markLoginState(){
+          // Only replace current entry; do NOT push additional login entries
+          try { history.replaceState({ authenticated:false, loginPage:true, ts: Date.now() }, '', 'index.html'); } catch{}
+        }
+        // Initialize a stable login state so Back/Forward stay here when unauthenticated
+        markLoginState();
+        // If already authenticated, do not allow staying on login; bounce to appropriate page
+        if (hasActiveSession()) { redirectAuthenticated(); return; }
+        // Trap back/forward when no session; allow navigation only after login created a session
+        window.addEventListener('popstate', function(){
+          if (!hasActiveSession()) {
+            // Stay on login
+            try { history.replaceState({ authenticated:false, loginPage:true, ts: Date.now() }, '', 'index.html'); } catch{}
+            // Use replace to avoid building up history entries
+            window.location.replace('index.html');
+          } else {
+            redirectAuthenticated();
+          }
+        });
+      })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Office Sign in</title>

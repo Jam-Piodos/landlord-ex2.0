@@ -152,6 +152,8 @@ function enforceAuthGuard() {
       // Push a new authenticated state to create a barrier
       // This prevents back button from accessing previous states (like login page)
       history.pushState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
+      // Push an extra sentinel barrier so there are at least 2 forward states to absorb back presses
+      history.pushState({ authenticated: true, barrier: 'll_trap', timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
     } catch {}
 
     // Handle browser back/forward buttons
@@ -170,7 +172,9 @@ function enforceAuthGuard() {
       if (isLoginPage) {
         // Prevent navigation to login page - immediately redirect back to authenticated page
         const targetPage = isHome ? 'home.html#map' : 'admin.html#profile';
-        history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', targetPage);
+        try { history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', targetPage); } catch {}
+        // Cancel the back navigation by moving forward
+        try { history.go(1); } catch {}
         window.location.replace(targetPage);
         return;
       }
@@ -182,6 +186,16 @@ function enforceAuthGuard() {
           return;
         }
         
+        // Requirement: If on home/admin and a back/forward occurs, keep user on same page.
+        // Reinsert the barrier immediately, cancel the navigation, and reload the same page.
+        try {
+          history.pushState({ authenticated: true, barrier: 'll_trap', timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
+          history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
+        } catch {}
+        try { history.go(1); } catch {}
+        window.location.replace(window.location.href);
+        return;
+
         // If we're on an authenticated page but state says we're not authenticated, fix it
         if (e.state && e.state.authenticated !== true) {
           const targetPage = isHome ? 'home.html#map' : 'admin.html#profile';
@@ -497,6 +511,20 @@ function enableNavigation() {
     window._llHashChangeBlocked = false;
   }
 }
+
+// Re-enforce barrier on BFCache restores/back-forward cache
+window.addEventListener('pageshow', function(e) {
+  try {
+    if (!isLoggedIn()) { return; }
+    const path = (window.location.pathname || '').toLowerCase();
+    const isHome = path.endsWith('/home.html') || path.endsWith('home.html');
+    const isAdmin = path.endsWith('/admin.html') || path.endsWith('admin.html');
+    if (!(isHome || isAdmin)) return;
+    // Reinstate authenticated state and an extra barrier
+    history.replaceState({ authenticated: true, timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
+    history.pushState({ authenticated: true, barrier: 'll_trap', timestamp: Date.now(), page: isHome ? 'home' : 'admin' }, '', window.location.href);
+  } catch {}
+});
 
 // Store reference to preventNav handler for cleanup
 let preventNavHandler = null;
@@ -4788,6 +4816,69 @@ function showAssignTaskModal(area) {
 
   modal.addEventListener('keydown', (e) => { if (e.key === 'Escape') { modal.style.display = 'none'; document.body.style.overflow = ''; }});
 
+  // --- Assignment validation helpers ---
+  async function resolveLandAreaId() {
+    let landAreaIdText = String(area.id ?? '').trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(landAreaIdText)) {
+      try {
+        const lhidVal = (area && area.lhid) ? String(area.lhid).trim() : '';
+        if (lhidVal) {
+          const { data: laByLhid } = await supabase
+            .from('land_areas')
+            .select('id')
+            .eq('lhid', lhidVal)
+            .maybeSingle();
+          if (laByLhid && laByLhid.id && uuidRegex.test(String(laByLhid.id))) {
+            landAreaIdText = String(laByLhid.id);
+          }
+        }
+      } catch {}
+    }
+    return landAreaIdText;
+  }
+
+  async function checkExistingAssignment(landAreaId, assignedTo) {
+    const assignedToStr = String(assignedTo);
+    async function tryTable(table){
+      try {
+        const { data, error } = await supabase
+          .from(table)
+          .select('assigned_to')
+          .eq('land_area_id', landAreaId);
+        if (error) return { ok:false };
+        const rows = Array.isArray(data) ? data : [];
+        if (rows.length === 0) return { ok:true, state:'none' };
+        const hasSame = rows.some(r => String(r.assigned_to) === assignedToStr);
+        return { ok:true, state: hasSame ? 'same' : 'other' };
+      } catch { return { ok:false }; }
+    }
+    // Prefer canonical tasks table first, then fallbacks
+    const primary = await tryTable('tasks');
+    if (primary.ok) return primary.state;
+    const fallbacks = ['assignments','survey_tasks','land_area_tasks'];
+    for (let i=0;i<fallbacks.length;i++){
+      const r = await tryTable(fallbacks[i]);
+      if (r.ok) return r.state;
+    }
+    return 'unknown';
+  }
+
+  // Real-time validation on assignee change
+  const saveBtn = document.getElementById('assign-task-save');
+  if (techSelect && saveBtn) {
+    techSelect.addEventListener('change', async function(){
+      const assigneeId = parseInt(this.value, 10);
+      const landId = await resolveLandAreaId();
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(landId)) { saveBtn.disabled = true; return; }
+      const state = await checkExistingAssignment(landId, assigneeId);
+      if (state === 'same') { alert('This land area is already assigned to this person.'); saveBtn.disabled = true; }
+      else if (state === 'other') { alert('This land area has already been assigned to another person and cannot be reassigned.'); saveBtn.disabled = true; }
+      else { saveBtn.disabled = false; }
+    });
+  }
+
   document.getElementById('assign-task-save').onclick = async () => {
 
     const assigneeId = parseInt(techSelect.value, 10);
@@ -4798,29 +4889,18 @@ function showAssignTaskModal(area) {
 
     const notes = document.getElementById('task-notes').value || null;
 
-    // Prefer RPC with SECURITY DEFINER to satisfy RLS
-    // Resolve UUID land_area_id. If area.id isn't a UUID, try to look it up by lhid.
-    let landAreaIdText = String(area.id ?? '').trim();
+    // Resolve UUID land_area_id for validation and RPC
+    let landAreaIdText = await resolveLandAreaId();
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(landAreaIdText)) {
-      try {
-        const lhidVal = (area && area.lhid) ? String(area.lhid).trim() : '';
-        if (lhidVal) {
-          const { data: laByLhid, error: laErr } = await supabase
-            .from('land_areas')
-            .select('id')
-            .eq('lhid', lhidVal)
-            .maybeSingle();
-          if (!laErr && laByLhid && laByLhid.id && uuidRegex.test(String(laByLhid.id))) {
-            landAreaIdText = String(laByLhid.id);
-          }
-        }
-      } catch {}
-    }
     if (!uuidRegex.test(landAreaIdText)) {
       alert('Failed to assign task: could not resolve land area UUID for this record.');
       return;
     }
+
+    // Validate existing assignment BEFORE save
+    const existing = await checkExistingAssignment(landAreaIdText, assigneeId);
+    if (existing === 'same') { alert('This land area is already assigned to this person.'); return; }
+    if (existing === 'other') { alert('This land area has already been assigned to another person and cannot be reassigned.'); return; }
 
     const { error } = await supabase.rpc('assign_task_universal', {
       p_land_area_id_text: landAreaIdText,

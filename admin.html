@@ -1,6 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <script>
+      (function(){
+        function toLogin(){ try { history.replaceState(null,'','index.html'); } catch(e){} window.location.replace('index.html'); }
+        try {
+          var raw = localStorage.getItem('ll_current_user');
+          if (!raw) return toLogin();
+          var sess = sessionStorage.getItem('ll_session');
+          if (!sess) return toLogin();
+          var user = JSON.parse(raw);
+          var role = String((user && user.role) || '').toLowerCase();
+          if (user && user.active !== false && role === 'admin') {
+            // Only replace current entry to avoid stacking extra admin entries across sessions
+            try { history.replaceState({ authenticated:true, page:'admin' }, '', 'admin.html'); } catch{}
+            // Trap back/forward immediately in case global handler hasn’t attached yet
+            window.addEventListener('popstate', function(){
+              try { history.replaceState({ authenticated:true, page:'admin' }, '', 'admin.html#profile'); } catch{}
+              window.location.replace('admin.html#profile');
+            });
+            return;
+          }
+          return toLogin();
+        } catch(e){ return toLogin(); }
+      })();
+    </script>
+    <script>
+      // Reload if returned from bfcache to avoid showing stale protected content
+      window.addEventListener('pageshow', function(e){ if (e.persisted) { try { location.reload(); } catch{} } });
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - LandLord</title>
@@ -1690,15 +1721,19 @@
             if (!supa) supa = await waitForSupabaseClient(5000);
             if (!supa && typeof window.getUsers === 'function') {
                 const legacy = await window.getUsers();
-                sampleUsers = (legacy || []).map(u => ({
+            sampleUsers = (legacy || []).map(u => {
+                const rawAvatar = ((u.user_avatar_url ?? u.avatar_url) ?? '').toString().trim();
+                const avatar = (!rawAvatar || rawAvatar === 'null' || rawAvatar === 'undefined' || rawAvatar === '#') ? '' : rawAvatar;
+                return {
                     id: u.user_id,
                     name: `${u.user_firstname || ''} ${u.user_lastname || ''}`.trim() || (u.user_email || 'User'),
                     email: u.user_email || '',
                     role: (u.role || 'user').toLowerCase(),
                     status: u.active === false ? 'suspended' : 'active',
                     lastActive: u.updated_at || u.created_at || new Date().toISOString(),
-                    avatar: u.user_avatar_url || u.avatar_url || ''
-                }));
+                    avatar
+                };
+            });
                 currentUsers = [...sampleUsers];
                 return;
             }
@@ -1713,15 +1748,19 @@
                 .select('user_id, user_firstname, user_lastname, user_email, role, active, username, user_avatar_url')
                 .order('user_id', { ascending: true });
             if (error) { console.error(error); return; }
-            sampleUsers = (data || []).map(u => ({
-                id: u.user_id,
-                name: `${u.user_firstname || ''} ${u.user_lastname || ''}`.trim() || u.username || (u.user_email || 'User'),
-                email: u.user_email || '',
-                role: (u.role || 'user').toLowerCase(),
-                status: u.active === false ? 'suspended' : 'active',
-                lastActive: new Date().toISOString(),
-                avatar: u.user_avatar_url || u.avatar_url || ''
-            }));
+            sampleUsers = (data || []).map(u => {
+                const rawAvatar = ((u.user_avatar_url ?? u.avatar_url) ?? '').toString().trim();
+                const avatar = (!rawAvatar || rawAvatar === 'null' || rawAvatar === 'undefined' || rawAvatar === '#') ? '' : rawAvatar;
+                return {
+                    id: u.user_id,
+                    name: `${u.user_firstname || ''} ${u.user_lastname || ''}`.trim() || u.username || (u.user_email || 'User'),
+                    email: u.user_email || '',
+                    role: (u.role || 'user').toLowerCase(),
+                    status: u.active === false ? 'suspended' : 'active',
+                    lastActive: new Date().toISOString(),
+                    avatar
+                };
+            });
             currentUsers = [...sampleUsers];
         } catch (e) { console.error(e); }
     }
@@ -1747,7 +1786,8 @@
             <tr data-user-id="${user.id}">
                  <td>
                      <div class="user-cell">
-                         ${user.avatar ? `<img src="${user.avatar}" alt="${user.name}" class="user-avatar">` : `<div class="avatar-initials">${getInitials(user.name, user.email)}</div>`}
+                         ${user.avatar ? `<img src="${user.avatar}" alt="${user.name}" class="user-avatar" onerror="this.style.display='none'; var sib=this.nextElementSibling; if(sib) sib.style.display='inline-flex';">` : ''}
+                         <div class="avatar-initials" style="${user.avatar ? 'display:none;' : ''}">${getInitials(user.name, user.email)}</div>
                          <div class="user-info">
                             <div class="user-name">${user.name}</div>
                             <div class="user-email">${user.email}</div>
@@ -2137,6 +2177,9 @@
         
         return date.toLocaleDateString();
     }
+
+    // Expose initials helper for any inline handlers if needed
+    window.llGetInitials = getInitials;
 
     // Make functions global for onclick handlers
     window.editUser = editUser;
