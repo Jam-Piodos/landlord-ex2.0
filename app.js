@@ -2823,7 +2823,7 @@ let _affineParams = null;
 
 try {
 
-  if (_affineLocalPoints.length >= 3 && _affineLocalPoints.length === _affineGpsPoints.length) {
+  if (_affineLocalPoints.length >= 4 && _affineLocalPoints.length === _affineGpsPoints.length) {
 
     _affineParams = _solveAffine(_affineLocalPoints, _affineGpsPoints);
 
@@ -3000,7 +3000,7 @@ function transformLatLngToSurvey(lat, lng) {
 
 function calculatePolygonArea(points) {
 
-  if (points.length < 3) return 0;
+  if (points.length < 4) return 0;
 
   
 
@@ -3790,9 +3790,9 @@ async function addSurveyToMap() {
 
 
 
-  // Draw polygon if we have 3 or more points
+  // Draw polygon if we have 4 or more points
 
-  if (allPoints.length >= 2) {
+  if (allPoints.length >= 4) {
 
     const polygon = L.polygon(allPoints, {
 
@@ -5696,7 +5696,7 @@ function validateCurrentStep() {
       isValid = easting.length > 0 && northing.length > 0 && !isNaN(parseFloat(easting)) && !isNaN(parseFloat(northing));
       break;
     case 4:
-      isValid = collectedPoints.length >= 3;
+      isValid = collectedPoints.length >= 4;
       break;
   }
   
@@ -5724,8 +5724,8 @@ function previousStep() {
 
 function generatePointFields() {
   const pointsCount = parseInt(document.getElementById('points-count').value);
-  if (!pointsCount || pointsCount < 3 || pointsCount > 20) {
-    alert('Please enter a valid number of points (3-20)');
+  if (!pointsCount || pointsCount < 4 || pointsCount > 20) {
+    alert('Please enter a valid number of points (4-20)');
     return;
   }
   
@@ -5804,7 +5804,7 @@ function collectAndValidatePoints() {
 }
 
 function calculateSummaryFromPoints() {
-  if (collectedPoints.length < 3) return;
+  if (collectedPoints.length < 4) return;
   
   const startPoint = {
     easting: parseFloat(document.getElementById('starting-easting').value),
