@@ -321,6 +321,7 @@
               .panel table,
               #rep-map-records,
               #rep-status-brgy,
+              #rep-problem-categories,
               #global-settings-menu {
                 display: none !important;
               }
@@ -426,15 +427,28 @@
             <table aria-label="Next week action plan">
               <thead>
                 <tr>
-                  <th style="width:26%">Barangay</th>
-                  <th style="width:16%">Problematic</th>
-                  <th style="width:16%">Workable</th>
-                  <th style="width:32%">Planned Action</th>
-                  <th style="width:10%">Coordinator</th>
+                  <th style="width:30%">Barangay</th>
+                  <th style="width:18%">Problematic</th>
+                  <th style="width:18%">Workable</th>
+                  <th style="width:34%">Planned Action</th>
                 </tr>
               </thead>
               <tbody data-print="plan-body">
-                <tr><td colspan="5">Loading…</td></tr>
+                <tr><td colspan="4">Loading…</td></tr>
+              </tbody>
+            </table>
+            <div class="spacer"></div>
+            <div class="section-title">Problem Categories Summary</div>
+            <table aria-label="Problem categories">
+              <thead>
+                <tr>
+                  <th style="width:40%">Problem Category</th>
+                  <th style="width:30%">Landowner</th>
+                  <th style="width:30%">Barangay</th>
+                </tr>
+              </thead>
+              <tbody data-print="problem-category-body">
+                <tr><td colspan="3">Loading…</td></tr>
               </tbody>
             </table>
             <div class="spacer"></div>
@@ -478,7 +492,12 @@
                 <th>Barangay</th><th>Workable</th><th>Problematic</th><th>Total Areas</th>
               </tr></thead><tbody><tr><td colspan="4">Loading...</td></tr></tbody></table>
             </div>
-            
+          </div>
+          <div class="panel" style="margin-top: 14px;">
+            <div class="panel-header">Problem Categories (Problematic Lands Only)</div>
+            <table id="rep-problem-categories"><thead><tr>
+              <th>Problem Category</th><th>Landowner</th><th>Barangay</th>
+            </tr></thead><tbody><tr><td colspan="3">Loading...</td></tr></tbody></table>
           </div>
           <script>
             (function(){
@@ -500,7 +519,8 @@
                 if (!container) return;
                 var sumTbody = container.querySelector('[data-print="summary-body"]');
                 var planTbody = container.querySelector('[data-print="plan-body"]');
-                if (!sumTbody || !planTbody) return;
+                var problemTbody = container.querySelector('[data-print="problem-category-body"]');
+                if (!sumTbody || !planTbody || !problemTbody) return;
                 var areas = (window.repAreas||[]);
                 sumTbody.innerHTML = areas.map(function(row){
                   var date = formatDate(row.created_at);
@@ -521,14 +541,44 @@
                     '<td>'+r.problematic+'</td>'+
                     '<td>'+r.workable+'</td>'+
                     '<td>'+(r.remarks || 'Resolve outstanding cases; verify documents; schedule site visit')+'</td>'+
-                    '<td>Field team</td>'+
                   '</tr>';
-                }).join('') || '<tr><td colspan="5">No problematic barangays at the moment.</td></tr>';
+                }).join('') || '<tr><td colspan="4">No problematic barangays at the moment.</td></tr>';
+                // Problem categories - only problematic lands
+                var problematicAreas = areas.filter(function(a){ return (a.land_status||'workable').toLowerCase() === 'problematic'; });
+                var categoryGroups = {};
+                problematicAreas.forEach(function(area){
+                  var cat = area.problem_category || 'Uncategorized';
+                  // Normalize category names
+                  if (cat === 'document infirmities') cat = 'Document Infirmities';
+                  else if (cat === 'land owner issues') cat = 'Land Owner Issues';
+                  else if (cat === 'With peace and order problem; unstable peace & order situation') cat = 'Peace and Order Problem';
+                  else if (cat === 'VLT Problems') cat = 'VLT Problems';
+                  else if (!cat || cat === '') cat = 'Uncategorized';
+                  if (!categoryGroups[cat]) categoryGroups[cat] = [];
+                  categoryGroups[cat].push(area);
+                });
+                var problemRows = [];
+                Object.keys(categoryGroups).sort().forEach(function(cat){
+                  categoryGroups[cat].forEach(function(area){
+                    problemRows.push({
+                      category: cat,
+                      lo_name: area.lo_name || '',
+                      barangay: area.barangay_name || ''
+                    });
+                  });
+                });
+                problemTbody.innerHTML = problemRows.map(function(r){
+                  return '<tr>'+
+                    '<td>'+r.category+'</td>'+
+                    '<td>'+r.lo_name+'</td>'+
+                    '<td>'+r.barangay+'</td>'+
+                  '</tr>';
+                }).join('') || '<tr><td colspan="3">No problematic lands with categories found.</td></tr>';
               }
               async function loadReports(){
                 const sb = await waitForSupabase();
                 try {
-                  const { data: areas, error: areaErr } = await sb.from('land_areas').select('id, lo_name, barangay_name, land_status, total_area, created_at, remarks, current_status_desc').order('created_at', { ascending: false });
+                  const { data: areas, error: areaErr } = await sb.from('land_areas').select('id, lo_name, barangay_name, land_status, total_area, created_at, remarks, problem_category').order('created_at', { ascending: false });
                   if (areaErr) throw areaErr;
                   const total = (areas||[]).length;
                   let workable=0, problematic=0, totalArea=0;
@@ -546,7 +596,7 @@
                       const created = a.created_at ? new Date(a.created_at).getTime() : 0;
                       if (created >= brgy[b].latestCreated) {
                         brgy[b].latestCreated = created;
-                        brgy[b].latestRemark = (a.remarks || a.current_status_desc || '').toString();
+                        brgy[b].latestRemark = (a.remarks || '').toString();
                       }
                     }
                   });
@@ -576,6 +626,36 @@
                     return `<tr><td>${k}</td><td>${n(r.workable)}</td><td>${n(r.problematic)}</td><td>${n(r.total)}</td></tr>`;
                   }).join('');
                   document.querySelector('#rep-status-brgy tbody').innerHTML = brgyRows || '<tr><td colspan="4">No data</td></tr>';
+                  // Problem categories table - only problematic lands
+                  const problematicAreas = areas.filter(a => (a.land_status||'workable').toLowerCase() === 'problematic');
+                  const categoryGroups = {};
+                  problematicAreas.forEach(function(area){
+                    var cat = area.problem_category || 'Uncategorized';
+                    // Normalize category names
+                    if (cat === 'document infirmities') cat = 'Document Infirmities';
+                    else if (cat === 'land owner issues') cat = 'Land Owner Issues';
+                    else if (cat === 'With peace and order problem; unstable peace & order situation') cat = 'Peace and Order Problem';
+                    else if (cat === 'VLT Problems') cat = 'VLT Problems';
+                    else if (!cat || cat === '') cat = 'Uncategorized';
+                    if (!categoryGroups[cat]) categoryGroups[cat] = [];
+                    categoryGroups[cat].push(area);
+                  });
+                  const problemRows = [];
+                  Object.keys(categoryGroups).sort().forEach(function(cat){
+                    categoryGroups[cat].forEach(function(area){
+                      problemRows.push({
+                        category: cat,
+                        lo_name: area.lo_name || '',
+                        barangay: area.barangay_name || ''
+                      });
+                    });
+                  });
+                  const problemTbody = document.querySelector('#rep-problem-categories tbody');
+                  if (problemTbody) {
+                    problemTbody.innerHTML = problemRows.map(function(r){
+                      return '<tr><td>'+r.category+'</td><td>'+r.lo_name+'</td><td>'+r.barangay+'</td></tr>';
+                    }).join('') || '<tr><td colspan="3">No problematic lands with categories found.</td></tr>';
+                  }
                   // refresh print content
                   renderPrintSimpleTable();
                 } catch(e) {
@@ -1014,6 +1094,15 @@
           box-shadow: 0 8px 24px rgba(0,0,0,.15);
           cursor: pointer; z-index: 1500; font-size: 20px;
         ">&#9776;</button>
+        <div id="landholdings-menu" style="
+          position: fixed; top: 60px; left: 16px; min-width: 220px; display: none;
+          background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; 
+          box-shadow: 0 10px 30px rgba(0,0,0,.15); z-index: 1501;
+          overflow: hidden;
+        ">
+          <button id="landholdings-view-item" style="width:100%; text-align:left; background:none; border:none; padding:12px 14px; font-weight:600; cursor:pointer; border-bottom:1px solid #e5e7eb;">Land Holdings</button>
+          <button id="problem-category-view-item" style="width:100%; text-align:left; background:none; border:none; padding:12px 14px; font-weight:600; cursor:pointer;">Problem Categories</button>
+        </div>
         <div id="global-settings-menu" style="
           position: fixed; top: 60px; right: 16px; min-width: 200px; display: none;
           background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.15); z-index: 1501;
@@ -1091,6 +1180,55 @@
           </div>
         </div>
 
+        <!-- Problem Category View Panel -->
+        <div id="problem-category-panel" class="landarea-panel expanded" style="
+          position: fixed;
+          top: 80px;
+          left: 20px;
+          width: 320px;
+          max-height: calc(100vh - 100px);
+          background: #ffffff;
+          border-radius: var(--radius-xl);
+          box-shadow: 0 18px 48px rgba(0,0,0,.18);
+          border: 1px solid #e5e7eb;
+          z-index: 1000;
+          overflow: hidden;
+          transition: all 0.3s ease;
+          display: none;
+        ">
+          <div class="landarea-panel-content" style="padding: 1rem; color:#111827;">
+            <div class="landarea-panel-header" style="
+              margin-bottom: 0.5rem;
+              padding-left: 3rem;
+              position: relative;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: .5rem;
+            ">
+              <div>
+                <h3 style="
+                  margin: 0;
+                  font-size: 1.125rem;
+                  font-weight: 700;
+                  color: #111827;
+                ">Problem Categories</h3>
+                <p id="problem-category-count" style="
+                  margin: 0.25rem 0 0 0;
+                  font-size: 0.875rem;
+                  color: #6b7280;
+                ">Loading...</p>
+              </div>
+            </div>
+            <div id="problem-category-list" style="
+              max-height: calc(100vh - 220px);
+              overflow-y: auto;
+            ">
+              <!-- Problem category groups will be loaded here -->
+            </div>
+          </div>
+        </div>
+
         <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.3.0/dist/MarkerCluster.css" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.3.0/dist/MarkerCluster.Default.css" />
@@ -1131,20 +1269,69 @@
                 showLogoutConfirmation();
               };
             }
-            // Land holdings burger toggle
+            // Land holdings burger toggle with dropdown menu
             const holdingsBtn = document.getElementById('landholdings-toggle-btn');
+            const holdingsMenu = document.getElementById('landholdings-menu');
             const panel = document.getElementById('landarea-panel');
-            if (holdingsBtn && panel) {
-              holdingsBtn.addEventListener('click', function(){
-                var wasHidden = panel.style.display === 'none' || !panel.style.display;
-                panel.style.display = wasHidden ? 'block' : 'none';
-                var repBtn = document.getElementById('open-reports-btn');
-                if (repBtn) {
-                  var isVisible = panel.style.display === 'block';
-                  // When panel is visible, send reports button behind (lower z-index)
-                  repBtn.style.zIndex = isVisible ? '900' : '1200';
+            const problemCategoryPanel = document.getElementById('problem-category-panel');
+            
+            if (holdingsBtn && holdingsMenu) {
+              holdingsBtn.addEventListener('click', function(e){
+                e.stopPropagation();
+                // If a panel is open, close it instead of showing menu
+                if (panel.style.display === 'block' || problemCategoryPanel.style.display === 'block') {
+                  panel.style.display = 'none';
+                  problemCategoryPanel.style.display = 'none';
+                  holdingsMenu.style.display = 'none';
+                  var repBtn = document.getElementById('open-reports-btn');
+                  if (repBtn) repBtn.style.zIndex = '1200';
+                } else {
+                  holdingsMenu.style.display = (holdingsMenu.style.display === 'none' || !holdingsMenu.style.display) ? 'block' : 'none';
                 }
               });
+              
+              // Close menu when clicking outside
+              document.addEventListener('click', function(ev){
+                if (holdingsMenu.style.display === 'block' && !holdingsMenu.contains(ev.target) && ev.target !== holdingsBtn) {
+                  holdingsMenu.style.display = 'none';
+                }
+              });
+              
+              // Land Holdings view option
+              const landholdingsViewItem = document.getElementById('landholdings-view-item');
+              if (landholdingsViewItem && panel) {
+                landholdingsViewItem.addEventListener('click', function(){
+                  holdingsMenu.style.display = 'none';
+                  problemCategoryPanel.style.display = 'none';
+                  var wasHidden = panel.style.display === 'none' || !panel.style.display;
+                  panel.style.display = wasHidden ? 'block' : 'none';
+                  var repBtn = document.getElementById('open-reports-btn');
+                  if (repBtn) {
+                    var isVisible = panel.style.display === 'block';
+                    repBtn.style.zIndex = isVisible ? '900' : '1200';
+                  }
+                });
+              }
+              
+              // Problem Category view option
+              const problemCategoryViewItem = document.getElementById('problem-category-view-item');
+              if (problemCategoryViewItem && problemCategoryPanel) {
+                problemCategoryViewItem.addEventListener('click', function(){
+                  holdingsMenu.style.display = 'none';
+                  panel.style.display = 'none';
+                  var wasHidden = problemCategoryPanel.style.display === 'none' || !problemCategoryPanel.style.display;
+                  problemCategoryPanel.style.display = wasHidden ? 'block' : 'none';
+                  if (wasHidden && window.loadProblemCategoryView) {
+                    window.loadProblemCategoryView();
+                  }
+                  var repBtn = document.getElementById('open-reports-btn');
+                  if (repBtn) {
+                    var isVisible = problemCategoryPanel.style.display === 'block';
+                    repBtn.style.zIndex = isVisible ? '900' : '1200';
+                  }
+                });
+              }
+              
               // Ensure correct z-index on initial load
               var repBtnInit = document.getElementById('open-reports-btn');
               if (repBtnInit) { repBtnInit.style.zIndex = '1200'; }
@@ -1731,18 +1918,14 @@
       </div>
       
       <div class="ll-field">
-        <label class="ll-label">Current Status</label>
-        <input class="ll-input" id="edit-current-status" type="text" placeholder="Enter current status" />
-      </div>
-      
-      <div class="ll-field">
-        <label class="ll-label">Status Description</label>
-        <input class="ll-input" id="edit-current-status-desc" type="text" placeholder="Enter status description" />
-      </div>
-      
-      <div class="ll-field">
         <label class="ll-label">Problem Category</label>
-        <input class="ll-input" id="edit-problem-category" type="text" placeholder="Enter problem category" />
+        <select class="ll-input" id="edit-problem-category">
+          <option value="">-- Select Problem Category --</option>
+          <option value="Document Infirmities">Document Infirmities</option>
+          <option value="Land Owner Issues">Land Owner Issues</option>
+          <option value="Peace and Order Problem">Peace and Order Problem</option>
+          <option value="VLT Problems">VLT Problems</option>
+        </select>
       </div>
       
       <div class="ll-field">

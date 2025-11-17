@@ -2387,6 +2387,243 @@ async function fetchAndRenderLandAreas() {
   }
 }
 
+// Problem Category View Logic
+async function loadProblemCategoryView() {
+  const listEl = document.getElementById('problem-category-list');
+  const countEl = document.getElementById('problem-category-count');
+  
+  if (!listEl) return;
+  
+  if (countEl) countEl.textContent = 'Loading...';
+  listEl.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6b7280;">Loading...</div>';
+  
+  // Fetch all land areas
+  const { data: landAreas, error: landError } = await supabase
+    .from('land_areas')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  if (landError) {
+    if (countEl) countEl.textContent = 'Error loading';
+    listEl.innerHTML = '<div style="padding: 1rem; text-align: center; color: #ef4444;">Error loading land areas</div>';
+    return;
+  }
+  
+  // Filter to only problematic lands
+  const problematicAreas = landAreas.filter(area => {
+    const status = (area.land_status || 'workable').toLowerCase();
+    return status === 'problematic';
+  });
+  
+  // Group by problem category (only problematic lands)
+  const categories = {
+    'Document Infirmities': [],
+    'Land Owner Issues': [],
+    'Peace and Order Problem': [],
+    'VLT Problems': [],
+    'Uncategorized': []
+  };
+  
+  problematicAreas.forEach(area => {
+    const category = area.problem_category || 'Uncategorized';
+    // Normalize category names to match dropdown options
+    let normalizedCategory = category;
+    if (category === 'document infirmities') normalizedCategory = 'Document Infirmities';
+    else if (category === 'land owner issues') normalizedCategory = 'Land Owner Issues';
+    else if (category === 'With peace and order problem; unstable peace & order situation') normalizedCategory = 'Peace and Order Problem';
+    else if (category === 'VLT Problems') normalizedCategory = 'VLT Problems';
+    else normalizedCategory = 'Uncategorized';
+    
+    if (categories.hasOwnProperty(normalizedCategory)) {
+      categories[normalizedCategory].push(area);
+    } else {
+      categories['Uncategorized'].push(area);
+    }
+  });
+  
+  // Update count
+  const totalCount = problematicAreas.length;
+  if (countEl) countEl.textContent = `Total: ${totalCount} problematic lands`;
+  
+  // Render grouped list
+  let html = '';
+  
+  Object.entries(categories).forEach(([categoryName, areas]) => {
+    if (areas.length === 0) return;
+    
+    const categoryId = categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    html += `
+      <div class="problem-category-group" style="margin-bottom: 1.5rem; border-bottom: 1px solid #374151; padding-bottom: 1rem;">
+        <div style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 0.75rem;
+          padding: 0.75rem;
+          background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+          border: 1px solid #374151;
+          border-radius: 12px;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        " onclick="toggleCategoryGroup('${categoryId}')" onmouseover="this.style.borderColor='#4b5563';" onmouseout="this.style.borderColor='#374151';">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #ffffff;">${categoryName}</h4>
+          <span style="
+            background: #ef4444;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+          ">${areas.length}</span>
+        </div>
+        <ul id="category-${categoryId}" class="landarea-list category-lands" style="display: block; padding: 0 !important; margin: 0 !important;">
+    `;
+    
+    areas.forEach((area, idx) => {
+      const ownerName = (area.lo_name && String(area.lo_name).trim()) || `Land ${idx + 1}`;
+      const barangay = (area.barangay_name && String(area.barangay_name).trim()) || 'No barangay specified';
+      const landStatus = area.land_status || 'problematic';
+      const statusIcon = '⚠️';
+      const statusText = 'Problematic';
+      
+      html += `
+        <li class="land-holding-card" data-area-id="${area.id}">
+          <div>
+            <div>
+              <div>${ownerName}</div>
+              <div>${barangay}</div>
+            </div>
+            <div class="status-problematic">
+              ${statusIcon} ${statusText}
+            </div>
+          </div>
+        </li>
+      `;
+    });
+    
+    html += `
+        </ul>
+      </div>
+    `;
+  });
+  
+  if (html === '') {
+    html = '<div style="padding: 1rem; text-align: center; color: #6b7280;">No land areas found</div>';
+  }
+  
+  listEl.innerHTML = html;
+  
+  // Store areas data and attach click handlers
+  if (!window.problemCategoryAreas) window.problemCategoryAreas = {};
+  Object.entries(categories).forEach(([categoryName, areas]) => {
+    areas.forEach(area => {
+      window.problemCategoryAreas[area.id] = area;
+    });
+  });
+  
+  // Attach click handlers to land items (using same structure as land holdings)
+  listEl.querySelectorAll('.land-holding-card').forEach(item => {
+    const areaId = item.getAttribute('data-area-id');
+    if (areaId && window.problemCategoryAreas[areaId]) {
+      const area = window.problemCategoryAreas[areaId];
+      item.onclick = function() {
+        if (window.zoomToLandArea) {
+          window.zoomToLandArea(area);
+        } else {
+          const event = new CustomEvent('zoomToLandArea', { detail: area });
+          window.dispatchEvent(event);
+        }
+        
+        document.querySelectorAll('.landarea-list li').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        
+        setTimeout(() => {
+          const map = window.leafletMap;
+          if (!map) return;
+          
+          let coords = area.path;
+          if (typeof coords === 'string') {
+            try { coords = JSON.parse(coords); } catch {} 
+          }
+          
+          if (Array.isArray(coords) && coords.length && !Array.isArray(coords[0]) && coords[0] && typeof coords[0].lat === 'number') {
+            coords = coords.map(p => [p.lat, p.lng]);
+          }
+          
+          let popupLatLng = null;
+          if (Array.isArray(coords) && coords.length > 0 && Array.isArray(coords[0])) {
+            let latSum = 0, lngSum = 0, count = 0;
+            coords.forEach(pt => {
+              if (Array.isArray(pt) && pt.length === 2 && !isNaN(pt[0]) && !isNaN(pt[1])) {
+                latSum += pt[0]; lngSum += pt[1]; count++;
+              }
+            });
+            if (count > 0) popupLatLng = L.latLng(latSum / count, lngSum / count);
+          }
+          
+          if (typeof showOwnerProfilePopup === 'function') {
+            showOwnerProfilePopup(area, coords, map, popupLatLng);
+          }
+        }, 400);
+      };
+    }
+  });
+}
+
+// Toggle category group expand/collapse
+function toggleCategoryGroup(categoryId) {
+  const groupEl = document.getElementById(`category-${categoryId}`);
+  if (groupEl) {
+    groupEl.style.display = groupEl.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+// Expose function globally for inline onclick handlers
+window.toggleCategoryGroup = toggleCategoryGroup;
+
+// Zoom to land area from problem category view
+function zoomToLandAreaFromCategory(area) {
+  if (window.zoomToLandArea) {
+    window.zoomToLandArea(area);
+  } else {
+    const event = new CustomEvent('zoomToLandArea', { detail: area });
+    window.dispatchEvent(event);
+  }
+  
+  // Show popup after zoom
+  setTimeout(() => {
+    const map = window.leafletMap;
+    if (!map) return;
+    
+    let coords = area.path;
+    if (typeof coords === 'string') {
+      try { coords = JSON.parse(coords); } catch {} 
+    }
+    
+    if (Array.isArray(coords) && coords.length && !Array.isArray(coords[0]) && coords[0] && typeof coords[0].lat === 'number') {
+      coords = coords.map(p => [p.lat, p.lng]);
+    }
+    
+    let popupLatLng = null;
+    if (Array.isArray(coords) && coords.length > 0 && Array.isArray(coords[0])) {
+      let latSum = 0, lngSum = 0, count = 0;
+      coords.forEach(pt => {
+        if (Array.isArray(pt) && pt.length === 2 && !isNaN(pt[0]) && !isNaN(pt[1])) {
+          latSum += pt[0]; lngSum += pt[1]; count++;
+        }
+      });
+      if (count > 0) popupLatLng = L.latLng(latSum / count, lngSum / count);
+    }
+    
+    if (typeof showOwnerProfilePopup === 'function') {
+      showOwnerProfilePopup(area, coords, map, popupLatLng);
+    }
+  }, 400);
+}
+
+// Expose function globally
+window.loadProblemCategoryView = loadProblemCategoryView;
+
 // Panel collapse/expand
 
 
@@ -4662,10 +4899,6 @@ async function showOwnerProfilePopup(area, coords, map, latlng) {
 
   cardHtml += `<div><b>Lot Number:</b></div><div>${fieldOrNA(area.lot_number)}</div>`;
 
-  cardHtml += `<div><b>Current Status:</b></div><div>${fieldOrNA(area.current_status)}</div>`;
-
-  cardHtml += `<div><b>Status Description:</b></div><div>${fieldOrNA(area.current_status_desc)}</div>`;
-
   cardHtml += `<div><b>Problem Category:</b></div><div>${fieldOrNA(area.problem_category)}</div>`;
 
   cardHtml += `<div><b>Sub Category:</b></div><div>${fieldOrNA(area.sub_category)}</div>`;
@@ -4959,10 +5192,6 @@ function showEditLandInfoModal(area) {
 
   setVal('edit-lot-number', area.lot_number);
 
-  setVal('edit-current-status', area.current_status);
-
-  setVal('edit-current-status-desc', area.current_status_desc);
-
   setVal('edit-problem-category', area.problem_category);
 
   setVal('edit-sub-category', area.sub_category);
@@ -5008,10 +5237,6 @@ function showEditLandInfoModal(area) {
       survey_number: 'edit-survey-number',
 
       lot_number: 'edit-lot-number',
-
-      current_status: 'edit-current-status',
-
-      current_status_desc: 'edit-current-status-desc',
 
       problem_category: 'edit-problem-category',
 
@@ -5396,7 +5621,7 @@ async function renderMapRecordsReport() {
 
             <th>Barangay</th>
 
-            <th>Status</th>
+            <th>Problem Category</th>
 
             <th>Total Area (m²)</th>
 
@@ -5428,7 +5653,7 @@ async function renderMapRecordsReport() {
 
     .from('land_areas')
 
-    .select('id, lo_name, barangay_name, current_status, total_area, path, created_at')
+    .select('id, lo_name, barangay_name, problem_category, total_area, path, created_at')
 
     .order('created_at', { ascending: false });
 
@@ -5474,7 +5699,7 @@ async function renderMapRecordsReport() {
 
       <td>${row.barangay_name || ''}</td>
 
-      <td>${row.current_status || ''}</td>
+      <td>${row.problem_category || ''}</td>
 
       <td>${area}</td>
 
