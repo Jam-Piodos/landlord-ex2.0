@@ -2415,6 +2415,16 @@ async function loadProblemCategoryView() {
     return status === 'problematic';
   });
   
+  // Debug: Log problematic areas and their categories
+  console.log('Total land areas:', landAreas.length);
+  console.log('Problematic areas:', problematicAreas.length);
+  console.log('Problematic areas with categories:', problematicAreas.map(a => ({
+    id: a.id,
+    lo_name: a.lo_name,
+    land_status: a.land_status,
+    problem_category: a.problem_category
+  })));
+  
   // Group by problem category (only problematic lands)
   const categories = {
     'Document Infirmities': [],
@@ -2425,15 +2435,33 @@ async function loadProblemCategoryView() {
   };
   
   problematicAreas.forEach(area => {
-    const category = area.problem_category || 'Uncategorized';
-    // Normalize category names to match dropdown options
-    let normalizedCategory = category;
-    if (category === 'document infirmities') normalizedCategory = 'Document Infirmities';
-    else if (category === 'land owner issues') normalizedCategory = 'Land Owner Issues';
-    else if (category === 'With peace and order problem; unstable peace & order situation') normalizedCategory = 'Peace and Order Problem';
-    else if (category === 'VLT Problems') normalizedCategory = 'VLT Problems';
-    else normalizedCategory = 'Uncategorized';
+    const category = (area.problem_category || '').trim();
+    // Normalize category names to match dropdown options (case-insensitive)
+    let normalizedCategory = 'Uncategorized';
     
+    if (!category) {
+      normalizedCategory = 'Uncategorized';
+    } else {
+      const catLower = category.toLowerCase();
+      // Check for exact matches first (capitalized)
+      if (category === 'Document Infirmities' || catLower === 'document infirmities') {
+        normalizedCategory = 'Document Infirmities';
+      } else if (category === 'Land Owner Issues' || catLower === 'land owner issues') {
+        normalizedCategory = 'Land Owner Issues';
+      } else if (category === 'Peace and Order Problem' || 
+                 catLower === 'peace and order problem' ||
+                 category === 'With peace and order problem; unstable peace & order situation' ||
+                 catLower.includes('peace') && catLower.includes('order')) {
+        normalizedCategory = 'Peace and Order Problem';
+      } else if (category === 'VLT Problems' || catLower === 'vlt problems') {
+        normalizedCategory = 'VLT Problems';
+      } else {
+        // If it doesn't match any known category, put it in Uncategorized
+        normalizedCategory = 'Uncategorized';
+      }
+    }
+    
+    // Add to the appropriate category
     if (categories.hasOwnProperty(normalizedCategory)) {
       categories[normalizedCategory].push(area);
     } else {
@@ -2441,17 +2469,32 @@ async function loadProblemCategoryView() {
     }
   });
   
+  // Debug: Log category distribution
+  console.log('Category distribution:', Object.entries(categories).map(([name, areas]) => ({
+    category: name,
+    count: areas.length
+  })));
+  
   // Update count
   const totalCount = problematicAreas.length;
   if (countEl) countEl.textContent = `Total: ${totalCount} problematic lands`;
   
-  // Render grouped list
+  // Render grouped list - show all categories even if they have zero lands
   let html = '';
   
-  Object.entries(categories).forEach(([categoryName, areas]) => {
-    if (areas.length === 0) return;
-    
+  // Define the order of categories (Uncategorized last)
+  const categoryOrder = [
+    'Document Infirmities',
+    'Land Owner Issues',
+    'Peace and Order Problem',
+    'VLT Problems',
+    'Uncategorized'
+  ];
+  
+  categoryOrder.forEach(categoryName => {
+    const areas = categories[categoryName] || [];
     const categoryId = categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    
     html += `
       <div class="problem-category-group" style="margin-bottom: 1.5rem; border-bottom: 1px solid #374151; padding-bottom: 1rem;">
         <div style="
@@ -2476,30 +2519,38 @@ async function loadProblemCategoryView() {
             font-weight: 700;
           ">${areas.length}</span>
         </div>
-        <ul id="category-${categoryId}" class="landarea-list category-lands" style="display: block; padding: 0 !important; margin: 0 !important;">
+        <ul id="category-${categoryId}" class="landarea-list category-lands" style="display: none; padding: 0 !important; margin: 0 !important;">
     `;
     
-    areas.forEach((area, idx) => {
-      const ownerName = (area.lo_name && String(area.lo_name).trim()) || `Land ${idx + 1}`;
-      const barangay = (area.barangay_name && String(area.barangay_name).trim()) || 'No barangay specified';
-      const landStatus = area.land_status || 'problematic';
-      const statusIcon = '⚠️';
-      const statusText = 'Problematic';
-      
+    if (areas.length === 0) {
       html += `
-        <li class="land-holding-card" data-area-id="${area.id}">
-          <div>
-            <div>
-              <div>${ownerName}</div>
-              <div>${barangay}</div>
-            </div>
-            <div class="status-problematic">
-              ${statusIcon} ${statusText}
-            </div>
-          </div>
+        <li style="padding: 1rem; text-align: center; color: #9ca3af; font-size: 0.875rem;">
+          No lands in this category
         </li>
       `;
-    });
+    } else {
+      areas.forEach((area, idx) => {
+        const ownerName = (area.lo_name && String(area.lo_name).trim()) || `Land ${idx + 1}`;
+        const barangay = (area.barangay_name && String(area.barangay_name).trim()) || 'No barangay specified';
+        const landStatus = area.land_status || 'problematic';
+        const statusIcon = '⚠️';
+        const statusText = 'Problematic';
+        
+        html += `
+          <li class="land-holding-card" data-area-id="${area.id}">
+            <div>
+              <div>
+                <div>${ownerName}</div>
+                <div>${barangay}</div>
+              </div>
+              <div class="status-problematic">
+                ${statusIcon} ${statusText}
+              </div>
+            </div>
+          </li>
+        `;
+      });
+    }
     
     html += `
         </ul>
@@ -3134,6 +3185,108 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
 
 
 
+// Geodetic Coordinate Calculations for Tie Points
+// Based on BLM 1 GSS 549
+
+// Constants
+const CONSTANT_E = 30.595; // For longitude
+const CONSTANT_N = 30.720; // For latitude
+
+// === LONGITUDE CALCULATIONS ===
+
+/**
+ * Formula for Longitude (eqn.1)
+ * TPL - P1E (Tie Point Longitude - Point 1 Easting)
+ */
+function calculateLongitudeDifference(tpl, p1e) {
+  return tpl - p1e;
+}
+
+/**
+ * Formula for getting the (sec") seconds of the coordinates (eqn.2)
+ * Ans ÷ constant E
+ * Example: -2334.660 ÷ 30.595 = 76.30854715"
+ * Note: Uses absolute value of distance, result is always positive
+ */
+function getLongitudeSeconds(distance, constant) {
+  return Math.abs(distance) / constant;
+}
+
+/**
+ * Formula for getting the longitude of Point 1 (eqn.3)
+ * Long E + (sec")
+ */
+function getLongitudePoint1(baseLong, additionalSeconds) {
+  const totalSeconds = baseLong.sec + additionalSeconds;
+  const totalMinutes = baseLong.min + Math.floor(totalSeconds / 60);
+  const finalSeconds = totalSeconds % 60;
+  const finalMinutes = totalMinutes % 60;
+  const finalDegrees = baseLong.deg + Math.floor(totalMinutes / 60);
+  
+  return {
+    deg: finalDegrees,
+    min: finalMinutes,
+    sec: finalSeconds
+  };
+}
+
+// === LATITUDE CALCULATIONS ===
+
+/**
+ * Formula for Latitude (eqn.1)
+ * TPN - P1N (Tie Point Northing - Point 1 Northing)
+ */
+function calculateLatitudeDifference(tpn, p1n) {
+  return tpn - p1n;
+}
+
+/**
+ * Formula for getting the (sec") seconds of the coordinates (eqn.2)
+ * Ans ÷ constant N
+ * Example: -3563.280 ÷ 30.720 = 109.4817708"
+ * Note: Uses absolute value of distance, result is always positive
+ */
+function getLatitudeSeconds(distance, constant) {
+  return Math.abs(distance) / constant;
+}
+
+/**
+ * Formula for getting the latitude of Point 1 (eqn.3)
+ * Lat N + (sec")
+ */
+function getLatitudePoint1(baseLat, additionalSeconds) {
+  const totalSeconds = baseLat.sec + additionalSeconds;
+  const totalMinutes = baseLat.min + Math.floor(totalSeconds / 60);
+  const finalSeconds = totalSeconds % 60;
+  const finalMinutes = totalMinutes % 60;
+  const finalDegrees = baseLat.deg + Math.floor(totalMinutes / 60);
+  
+  return {
+    deg: finalDegrees,
+    min: finalMinutes,
+    sec: finalSeconds
+  };
+}
+
+/**
+ * Convert DMS to decimal degrees
+ */
+function dmsToDecimal(deg, min, sec) {
+  return deg + min/60 + sec/3600;
+}
+
+/**
+ * Convert decimal degrees to DMS (Degrees, Minutes, Seconds)
+ */
+function decimalToDMS(decimal) {
+  const degrees = Math.floor(decimal);
+  const minutesDecimal = (decimal - degrees) * 60;
+  const minutes = Math.floor(minutesDecimal);
+  const seconds = (minutesDecimal - minutes) * 60;
+  
+  return { deg: degrees, min: minutes, sec: seconds };
+}
+
 // Transform survey coordinates to lat/lng using selected reference system formula
 function transformSurveyToLatLng(easting, northing) {
 
@@ -3142,58 +3295,62 @@ function transformSurveyToLatLng(easting, northing) {
   const TPL = 20000.000;   // Tie Point Easting
 
   // Use selected reference system constants and tie point
-  const CONST_N = selectedReferenceSystem.cn || 30.720;  // For latitude
-  const CONST_E = selectedReferenceSystem.ce || 30.595;  // For longitude
+  const CONST_N = selectedReferenceSystem.cn || CONSTANT_N;  // For latitude
+  const CONST_E = selectedReferenceSystem.ce || CONSTANT_E;  // For longitude
   
   // Use tie point from selected reference system
+  // BLLM 1 Latitude: 8° 22' 16.20" N
+  // GSS 549 Longitude: 124° 51' 46.971" E
   const tieLatDeg = selectedReferenceSystem.tieLatDeg || 8;
   const tieLatMin = selectedReferenceSystem.tieLatMin || 22;
   const tieLatSec = selectedReferenceSystem.tieLatSec || 16.20;
   const tieLonDeg = selectedReferenceSystem.tieLonDeg || 124;
   const tieLonMin = selectedReferenceSystem.tieLonMin || 51;
-  const tieLonSec = selectedReferenceSystem.tieLonSec || 46.97;
+  const tieLonSec = selectedReferenceSystem.tieLonSec || 46.971;
 
-  // ===== COORDINATE CONVERSION FORMULA ===== //
-  // Step 1: Calculate differences (TPN - P1N, TPL - P1E)  
-  const deltaN = TPN - northing;  // TPN - P1N
-  const deltaE = TPL - easting;   // TPL - P1E
+  // ===== LATITUDE CALCULATIONS (BLLM 1) ===== //
+  // Equation 1: TPN - P1N (Tie Point Northing - Point 1 Northing)
+  // Example: 20000.000 - 23563.280 = -3563.280
+  const latDiff = calculateLatitudeDifference(TPN, northing);
+  
+  // Equation 2: Convert difference to arc-seconds
+  // Example: -3563.280 ÷ 30.720 = +109.4817708"
+  // The function already uses absolute value, so result is always positive
+  // When TPN - P1N is negative (P1N > TPN), point is north, so we ADD seconds
+  // When TPN - P1N is positive (P1N < TPN), point is south, so we SUBTRACT seconds
+  const latSecondsAbs = getLatitudeSeconds(latDiff, CONST_N);
+  const latSeconds = latDiff < 0 ? latSecondsAbs : -latSecondsAbs;
+  
+  // Equation 3: Get latitude of Point 1
+  // Example: 8°22'16.20" + 0°0'109.4817708" = 8°24'5.68" N
+  const baseLat = { deg: tieLatDeg, min: tieLatMin, sec: tieLatSec };
+  const latDMS = getLatitudePoint1(baseLat, latSeconds);
+  
+  // Convert to decimal degrees
+  // Example: 8 + 24/60 + 5.68/3600 = 8.40157778
+  const lat = dmsToDecimal(latDMS.deg, latDMS.min, latDMS.sec);
 
-  // Step 2: Convert to arc-seconds using constants
-  const secLat = deltaN / CONST_N;    // ΔN ÷ constant N
-  const secLon = deltaE / CONST_E;    // ΔE ÷ constant E
-
-  // Step 3: Add arc-seconds to tie point coordinates (DMS arithmetic)
-  // Tie point DMS components from selected reference system
-  let latDeg = tieLatDeg, latMin = tieLatMin, latSec = tieLatSec;
-  let lonDeg = tieLonDeg, lonMin = tieLonMin, lonSec = tieLonSec;
-
-  // Add the calculated seconds to the DMS components
-  latSec += secLat;
-  lonSec += secLon;
-
-  // Handle seconds overflow into minutes
-  if (latSec >= 60) {
-    latMin += Math.floor(latSec / 60);
-    latSec = latSec % 60;
-  }
-  if (lonSec >= 60) {
-    lonMin += Math.floor(lonSec / 60);
-    lonSec = lonSec % 60;
-  }
-
-  // Handle minutes overflow into degrees
-  if (latMin >= 60) {
-    latDeg += Math.floor(latMin / 60);
-    latMin = latMin % 60;
-  }
-  if (lonMin >= 60) {
-    lonDeg += Math.floor(lonMin / 60);
-    lonMin = lonMin % 60;
-  }
-
-  // Step 4: Convert final DMS to decimal degrees
-  const lat = latDeg + (latMin / 60) + (latSec / 3600);
-  const lng = lonDeg + (lonMin / 60) + (lonSec / 3600);
+  // ===== LONGITUDE CALCULATIONS (GSS 549) ===== //
+  // Equation 1: TPL - P1E (Tie Point Longitude - Point 1 Easting)
+  // Example: 20000.000 - 22334.660 = -2334.660
+  const longDiff = calculateLongitudeDifference(TPL, easting);
+  
+  // Equation 2: Convert difference to arc-seconds
+  // Example: -2334.660 ÷ 30.595 = +76.30854715"
+  // The function already uses absolute value, so result is always positive
+  // When TPL - P1E is negative (P1E > TPL), point is east, so we ADD seconds
+  // When TPL - P1E is positive (P1E < TPL), point is west, so we SUBTRACT seconds
+  const longSecondsAbs = getLongitudeSeconds(longDiff, CONST_E);
+  const longSeconds = longDiff < 0 ? longSecondsAbs : -longSecondsAbs;
+  
+  // Equation 3: Get longitude of Point 1
+  // Example: 124°51'46.97" + 0°0'76.30854715" = 124°53'3.28" E
+  const baseLong = { deg: tieLonDeg, min: tieLonMin, sec: tieLonSec };
+  const lonDMS = getLongitudePoint1(baseLong, longSeconds);
+  
+  // Convert to decimal degrees
+  // Example: 124 + 53/60 + 3.28/3600 = 124.884244
+  const lng = dmsToDecimal(lonDMS.deg, lonDMS.min, lonDMS.sec);
   
   // Calculate distance and azimuth for compatibility with existing code
   const startE = parseFloat(document.getElementById('starting-easting')?.value?.replace(/[^\d.-]/g, '')) || 20000;
@@ -3203,7 +3360,6 @@ function transformSurveyToLatLng(easting, northing) {
   const distance = Math.sqrt(deltaEasting * deltaEasting + deltaNorthing * deltaNorthing);
   let azimuth = Math.atan2(deltaEasting, deltaNorthing) * (180 / Math.PI);
   if (azimuth < 0) azimuth += 360;
-
 
   return { lat, lng, distance, azimuth };
 
@@ -5116,8 +5272,6 @@ function showAssignTaskModal(area) {
 
     const assigneeId = parseInt(techSelect.value, 10);
 
-    const dueDate = (document.getElementById('task-due-date').value || null);
-
     const priority = 'normal';
 
     const notes = document.getElementById('task-notes').value || null;
@@ -5138,7 +5292,7 @@ function showAssignTaskModal(area) {
     const { error } = await supabase.rpc('assign_task_universal', {
       p_land_area_id_text: landAreaIdText,
       p_assigned_to: assigneeId,
-      p_due_date: dueDate,
+      p_due_date: null,
       p_priority: priority,
       p_notes: notes
     });
@@ -5722,8 +5876,12 @@ let currentStep = 1;
 let totalSteps = 4;
 let collectedPoints = [];
 // Store selected reference system constants and tie point
+// Default: BLLM 1, GSS 549
+// BLLM 1 Latitude: 8° 22' 16.20" N, Constant: 30.720
+// GSS 549 Longitude: 124° 51' 46.971" E, Constant: 30.595
+// Tie Points: 20,000 → northing, 20,000 → easting
 let selectedReferenceSystem = {
-  name: 'cad867',
+  name: 'gss549',
   cn: 30.720,
   ce: 30.595,
   tieLatDeg: 8,
@@ -5777,7 +5935,10 @@ function resetModalToStep1() {
     refSystemSelect.dispatchEvent(new Event('change', { bubbles: true }));
   }
   
-  // Reset to default reference system
+  // Reset to default reference system (BLLM 1, GSS 549)
+  // BLLM 1 Latitude: 8° 22' 16.20" N, Constant: 30.720
+  // GSS 549 Longitude: 124° 51' 46.971" E, Constant: 30.595
+  // Tie Points: 20,000 → northing, 20,000 → easting
   selectedReferenceSystem = {
     name: 'gss549',
     cn: 30.720,
